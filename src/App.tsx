@@ -10,6 +10,7 @@ import TimezoneSettings from './pages/TimezoneSettings';
 import BusinessHoursSettings from './pages/BusinessHoursSettings';
 import SiteCustomization from './pages/SiteCustomization';
 import PublicCompanyPage from './pages/PublicCompanyPage';
+import Services from './pages/Services';
 import { UserProfileProvider } from './contexts/UserProfileContext';
 
 
@@ -74,6 +75,10 @@ function App() {
           <Route
             path="/site/customization"
             element={session ? <SiteCustomization /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/catalog/services"
+            element={session ? <Services /> : <Navigate to="/login" />}
           />
           <Route
             path="/"

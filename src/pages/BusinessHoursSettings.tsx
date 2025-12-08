@@ -40,7 +40,6 @@ export default function BusinessHoursSettings() {
             slots: [{ start_time: '07:00', end_time: '16:00' }]
         }))
     );
-    const [timezone, setTimezone] = useState('America/Manaus');
     const [timezoneLabel, setTimezoneLabel] = useState('GMT-04:00 Amazon Time - Manaus, Campo Grande, Cuiabá, Porto Velho');
 
     useEffect(() => {
@@ -63,7 +62,6 @@ export default function BusinessHoursSettings() {
             if (error) throw error;
 
             if (data?.timezone) {
-                setTimezone(data.timezone);
                 setTimezoneLabel(getTimezoneLabel(data.timezone));
             }
         } catch (error) {
