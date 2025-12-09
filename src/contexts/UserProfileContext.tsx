@@ -23,6 +23,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const hasFetched = useRef(false);
+    const profileRef = useRef<UserProfile | null>(null);
 
     const fetchProfile = async (force = false) => {
         // Se já buscou e não está forçando, não busca novamente
@@ -36,6 +37,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
             if (!user) {
                 setProfile(null);
+                profileRef.current = null;
                 setLoading(false);
                 hasFetched.current = true;
                 return;
@@ -50,7 +52,9 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             if (error) {
                 console.error('Error fetching profile:', error);
             } else if (data) {
-                setProfile(data as UserProfile);
+                const newProfile = data as UserProfile;
+                setProfile(newProfile);
+                profileRef.current = newProfile;
             }
             hasFetched.current = true;
         } catch (error) {
@@ -64,13 +68,20 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         fetchProfile();
 
         // Listen for auth changes to re-fetch or clear
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_IN') {
-                setLoading(true);
-                hasFetched.current = false; // Reset flag para forçar novo fetch
-                fetchProfile(true);
+                // Only refetch if we don't have a profile OR if the user ID changed
+                const currentUserId = profileRef.current?.id;
+                const newUserId = session?.user?.id;
+
+                if (!currentUserId || (newUserId && newUserId !== currentUserId)) {
+                    setLoading(true);
+                    hasFetched.current = false; // Reset flag para forçar novo fetch
+                    fetchProfile(true);
+                }
             } else if (event === 'SIGNED_OUT') {
                 setProfile(null);
+                profileRef.current = null;
                 setLoading(false);
                 hasFetched.current = false;
             }

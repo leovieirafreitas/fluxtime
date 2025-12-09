@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
@@ -26,6 +26,105 @@ const DAYS_OF_WEEK = [
     { value: 6, label: 'Sábado' },
     { value: 0, label: 'Domingo' },
 ];
+
+interface TimePickerProps {
+    value: string;
+    onChange: (value: string) => void;
+    disabled?: boolean;
+    theme: string;
+}
+
+const CustomTimePicker = ({ value, onChange, disabled, theme }: TimePickerProps) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const hours = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
+    const minutes = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+
+        if (isOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isOpen]);
+
+    const [selectedHour, selectedMinute] = value ? value.split(':') : ['00', '00'];
+
+    // Scroll to selected time when opening
+    useEffect(() => {
+        if (isOpen && containerRef.current) {
+            const hourEl = containerRef.current.querySelector(`[data-hour="${selectedHour}"]`);
+            const minuteEl = containerRef.current.querySelector(`[data-minute="${selectedMinute}"]`);
+            hourEl?.scrollIntoView({ block: 'center' });
+            minuteEl?.scrollIntoView({ block: 'center' });
+        }
+    }, [isOpen]);
+
+    return (
+        <div className="relative w-full h-full" ref={containerRef}>
+            <button
+                type="button"
+                onClick={() => !disabled && setIsOpen(!isOpen)}
+                className={`w-full h-full bg-transparent border-none text-base font-medium focus:ring-0 text-center cursor-pointer flex items-center justify-center outline-none ${theme === 'dark' ? 'text-white' : 'text-slate-900'} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+                disabled={disabled}
+            >
+                {value?.substring(0, 5)}
+            </button>
+            <Clock className={`w-4 h-4 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-200 ${isOpen ? 'rotate-180 text-blue-500' : theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`} />
+
+            {/* Dropdown */}
+            {isOpen && (
+                <div className={`absolute top-[calc(100%+1rem)] left-1/2 -translate-x-1/2 w-48 p-2 rounded-xl shadow-xl border z-50 flex gap-2 animate-in fade-in zoom-in-95 duration-200 ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+                    {/* Hours */}
+                    <div className="flex-1 h-56 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700 px-1">
+                        <div className={`px-2 py-1 mb-1 text-xs font-bold text-center ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Hora</div>
+                        {hours.map(hour => (
+                            <div
+                                key={hour}
+                                data-hour={hour}
+                                onClick={() => onChange(`${hour}:${selectedMinute}`)}
+                                className={`px-2 py-2 text-center text-sm rounded-lg cursor-pointer transition-all mb-1 ${hour === selectedHour
+                                    ? 'bg-blue-600 text-white font-medium shadow-sm'
+                                    : theme === 'dark' ? 'text-slate-300 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-100'
+                                    }`}
+                            >
+                                {hour}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Separator */}
+                    <div className={`w-[1px] my-2 ${theme === 'dark' ? 'bg-slate-700' : 'bg-slate-100'}`} />
+
+                    {/* Minutes */}
+                    <div className="flex-1 h-56 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700 px-1">
+                        <div className={`px-2 py-1 mb-1 text-xs font-bold text-center ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Min</div>
+                        {minutes.map(minute => (
+                            <div
+                                key={minute}
+                                data-minute={minute}
+                                onClick={() => onChange(`${selectedHour}:${minute}`)}
+                                className={`px-2 py-2 text-center text-sm rounded-lg cursor-pointer transition-all mb-1 ${minute === selectedMinute
+                                    ? 'bg-blue-600 text-white font-medium shadow-sm'
+                                    : theme === 'dark' ? 'text-slate-300 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-100'
+                                    }`}
+                            >
+                                {minute}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default function BusinessHoursSettings() {
     const { theme } = useTheme();
@@ -245,15 +344,7 @@ export default function BusinessHoursSettings() {
                         <Menu className="w-6 h-6" />
                     </button>
 
-                    {/* Breadcrumb */}
-                    <div className={`flex items-center gap-2 mb-6 text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-                        </svg>
-                        <span>Negócio</span>
-                        <span>/</span>
-                        <span className="font-medium">Horários e turnos</span>
-                    </div>
+
 
                     {/* Header com Tabs e Botão Salvar */}
                     <div className="flex items-center justify-between mb-8">
@@ -261,10 +352,10 @@ export default function BusinessHoursSettings() {
                         <div className="flex gap-1">
                             <button
                                 onClick={() => setActiveTab('funcionamento')}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${activeTab === 'funcionamento'
-                                    ? 'bg-blue-600 text-white shadow-sm'
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${activeTab === 'funcionamento'
+                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
                                     : theme === 'dark'
-                                        ? 'text-slate-400 hover:text-slate-300 hover:bg-slate-800'
+                                        ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                                     }`}
                             >
@@ -273,15 +364,15 @@ export default function BusinessHoursSettings() {
                             </button>
                             <button
                                 onClick={() => setActiveTab('colaboradores')}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${activeTab === 'colaboradores'
-                                    ? 'bg-blue-600 text-white shadow-sm'
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${activeTab === 'colaboradores'
+                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
                                     : theme === 'dark'
-                                        ? 'text-slate-400 hover:text-slate-300 hover:bg-slate-800'
+                                        ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                                     }`}
                             >
                                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                                    <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
                                 </svg>
                                 Colaboradores
                             </button>
@@ -298,146 +389,132 @@ export default function BusinessHoursSettings() {
                     </div>
 
                     {/* Content */}
+                    {/* Content */}
                     {activeTab === 'funcionamento' && (
-                        <div className="max-w-4xl mx-auto">
+                        <div className="max-w-5xl mx-auto mt-8">
                             {/* Título e Descrição */}
-                            <h2 className={`text-xl font-bold mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-                                Horário de funcionamento
-                            </h2>
-                            <p className={`text-sm mb-6 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                                Limite os horários que seus clientes podem agendar online. Essa informação fica disponível no seu site.
-                            </p>
+                            <div className="mb-8">
+                                <h2 className={`text-xl font-bold mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                                    Horário de funcionamento
+                                </h2>
+                                <p className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                                    Limite os horários que seus clientes podem agendar online. Essa informação fica disponível no seu site.
+                                </p>
+                            </div>
 
                             {/* Timezone Info */}
-                            <div className={`mb-8 p-4 rounded-lg flex items-start gap-3 ${theme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
-                                <svg className={`w-5 h-5 flex-shrink-0 mt-0.5 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`} fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                </svg>
-                                <div className="flex-1">
-                                    <p className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                                        Os horários abaixo estão no fuso horário de <strong>{timezoneLabel}</strong>. Ao realizar o agendamento pelo seu site, o horário será convertido para o fuso horário onde o cliente se localiza.
+                            <div className={`mb-8 p-4 rounded-xl border flex items-start gap-4 ${theme === 'dark' ? 'bg-indigo-900/20 border-indigo-900/50' : 'bg-indigo-50 border-indigo-100'}`}>
+                                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg">
+                                    <svg className="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                                <div className="flex-1 pt-1">
+                                    <h4 className={`text-sm font-bold mb-1 ${theme === 'dark' ? 'text-indigo-300' : 'text-indigo-900'}`}>Fuso Horário</h4>
+                                    <p className={`text-sm ${theme === 'dark' ? 'text-indigo-200/70' : 'text-indigo-700/80'}`}>
+                                        Os horários abaixo estão no fuso horário de <strong className="text-indigo-800 dark:text-indigo-200">{timezoneLabel}</strong>. Ao realizar o agendamento pelo seu site, o horário será convertido para o fuso horário onde o cliente se localiza.
                                     </p>
                                 </div>
                             </div>
 
-                            {/* Days Schedule - SEM CARD */}
-                            <div className="space-y-4">
-                                {schedules.map((schedule, dayIndex) => {
-                                    const day = DAYS_OF_WEEK.find(d => d.value === schedule.day_of_week);
-                                    if (!day) return null;
+                            {/* Days Schedule - Card Premium */}
+                            <div className={`rounded-2xl border overflow-hidden ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} shadow-sm`}>
+                                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                                    {schedules.map((schedule, dayIndex) => {
+                                        const day = DAYS_OF_WEEK.find(d => d.value === schedule.day_of_week);
+                                        if (!day) return null;
 
-                                    return (
-                                        <div key={schedule.day_of_week}>
-                                            {schedule.slots.map((slot, slotIndex) => (
-                                                <div
-                                                    key={slotIndex}
-                                                    className={`grid grid-cols-[200px_1fr_auto] gap-4 items-center ${slotIndex > 0 ? 'mt-3' : ''
-                                                        }`}
-                                                >
-                                                    {/* Checkbox e Label - Apenas na primeira linha */}
-                                                    {slotIndex === 0 ? (
-                                                        <label className="flex items-center gap-3">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={schedule.is_open}
-                                                                onChange={() => handleToggleDay(dayIndex)}
-                                                                className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                                                            />
-                                                            <span className={`font-normal ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-                                                                {day.label}
-                                                            </span>
-                                                            {!schedule.is_open && (
-                                                                <span className={`text-xs px-2 py-0.5 rounded font-medium ${theme === 'dark' ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-600'
-                                                                    }`}>
-                                                                    Fechado
+                                        return (
+                                            <div key={schedule.day_of_week} className={`p-6 transition-colors border-b last:border-0 ${theme === 'dark' ? 'border-slate-800' : 'border-slate-100'} ${!schedule.is_open ? 'bg-slate-50/50 dark:bg-white/[0.02]' : 'hover:bg-slate-50/50 dark:hover:bg-white/[0.02]'}`}>
+                                                <div className="flex flex-col md:flex-row md:items-center gap-6">
+                                                    {/* Left: Day Toggle */}
+                                                    <div className="w-[200px] flex-shrink-0">
+                                                        <label className="flex items-center gap-3 cursor-pointer group">
+                                                            <div className="relative">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={schedule.is_open}
+                                                                    onChange={() => handleToggleDay(dayIndex)}
+                                                                    className="sr-only"
+                                                                />
+                                                                <div className={`w-11 h-6 rounded-full transition-colors duration-200 ease-in-out ${schedule.is_open ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-700'}`}></div>
+                                                                <div className={`absolute left-1 top-1 w-4 h-4 rounded-full bg-white transition-transform duration-200 ease-in-out ${schedule.is_open ? 'translate-x-5' : 'translate-x-0'}`}></div>
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                                                                    {day.label}
                                                                 </span>
-                                                            )}
+                                                                {!schedule.is_open && (
+                                                                    <span className="text-xs text-slate-500 font-medium">Oficina fechada</span>
+                                                                )}
+                                                            </div>
                                                         </label>
-                                                    ) : (
-                                                        <div></div>
-                                                    )}
-
-                                                    {/* Time Inputs */}
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="relative flex-1 max-w-[180px]">
-                                                            <Clock className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${schedule.is_open && slotIndex === 0
-                                                                ? theme === 'dark' ? 'text-slate-500' : 'text-slate-400'
-                                                                : slotIndex > 0
-                                                                    ? theme === 'dark' ? 'text-slate-500' : 'text-slate-400'
-                                                                    : theme === 'dark' ? 'text-slate-700' : 'text-slate-300'
-                                                                }`} />
-                                                            <input
-                                                                type="time"
-                                                                value={slot.start_time}
-                                                                onChange={(e) => handleTimeChange(dayIndex, slotIndex, 'start_time', e.target.value)}
-                                                                disabled={!schedule.is_open && slotIndex === 0}
-                                                                className={`w-full pl-10 pr-3 py-2.5 rounded-lg border text-sm transition-colors ${schedule.is_open || slotIndex > 0
-                                                                    ? theme === 'dark'
-                                                                        ? 'bg-slate-800 border-slate-700 text-white hover:border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'
-                                                                        : 'bg-white border-slate-200 text-slate-900 hover:border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'
-                                                                    : theme === 'dark'
-                                                                        ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed'
-                                                                        : 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
-                                                                    }`}
-                                                            />
-                                                        </div>
-
-                                                        <div className="relative flex-1 max-w-[180px]">
-                                                            <Clock className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${schedule.is_open && slotIndex === 0
-                                                                ? theme === 'dark' ? 'text-slate-500' : 'text-slate-400'
-                                                                : slotIndex > 0
-                                                                    ? theme === 'dark' ? 'text-slate-500' : 'text-slate-400'
-                                                                    : theme === 'dark' ? 'text-slate-700' : 'text-slate-300'
-                                                                }`} />
-                                                            <input
-                                                                type="time"
-                                                                value={slot.end_time}
-                                                                onChange={(e) => handleTimeChange(dayIndex, slotIndex, 'end_time', e.target.value)}
-                                                                disabled={!schedule.is_open && slotIndex === 0}
-                                                                className={`w-full pl-10 pr-3 py-2.5 rounded-lg border text-sm transition-colors ${schedule.is_open || slotIndex > 0
-                                                                    ? theme === 'dark'
-                                                                        ? 'bg-slate-800 border-slate-700 text-white hover:border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'
-                                                                        : 'bg-white border-slate-200 text-slate-900 hover:border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'
-                                                                    : theme === 'dark'
-                                                                        ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed'
-                                                                        : 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
-                                                                    }`}
-                                                            />
-                                                        </div>
                                                     </div>
 
-                                                    {/* Action Button */}
-                                                    {slotIndex === 0 ? (
-                                                        <button
-                                                            onClick={() => handleAddSlot(dayIndex)}
-                                                            disabled={!schedule.is_open}
-                                                            className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all ${schedule.is_open
-                                                                ? theme === 'dark'
-                                                                    ? 'hover:bg-slate-800 text-slate-400 hover:text-white'
-                                                                    : 'hover:bg-slate-100 text-slate-600 hover:text-slate-900'
-                                                                : 'opacity-30 cursor-not-allowed text-slate-400'
-                                                                }`}
-                                                            title="Adicionar outro horário"
-                                                        >
-                                                            <Plus className="w-5 h-5" />
-                                                        </button>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => handleRemoveSlot(dayIndex, slotIndex)}
-                                                            className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all ${theme === 'dark'
-                                                                ? 'hover:bg-red-900/20 text-red-400 hover:text-red-300'
-                                                                : 'hover:bg-red-50 text-red-500 hover:text-red-600'
-                                                                }`}
-                                                            title="Remover horário"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    )}
+                                                    {/* Right: Slots */}
+                                                    <div className="flex-1 space-y-3">
+                                                        {schedule.is_open ? (
+                                                            schedule.slots.map((slot, slotIndex) => (
+                                                                <div
+                                                                    key={slotIndex}
+                                                                    className="flex items-center gap-3 animate-fade-in"
+                                                                >
+                                                                    {/* Time Inputs Group */}
+                                                                    <div className={`flex-1 flex items-center gap-0 p-1.5 rounded-xl border ${theme === 'dark' ? 'bg-[#0f0f0f] border-slate-800' : 'bg-white border-slate-200'} shadow-sm hover:border-blue-400 dark:hover:border-blue-500 transition-colors`}>
+                                                                        <div className="flex-1 relative group flex items-center justify-center h-full">
+                                                                            <CustomTimePicker
+                                                                                value={slot.start_time}
+                                                                                onChange={(val) => handleTimeChange(dayIndex, slotIndex, 'start_time', val)}
+                                                                                theme={theme}
+                                                                                disabled={!schedule.is_open}
+                                                                            />
+                                                                        </div>
+                                                                        <div className={`h-6 w-[1px] ${theme === 'dark' ? 'bg-slate-700' : 'bg-slate-200'}`}></div>
+                                                                        <div className="flex-1 relative group flex items-center justify-center h-full">
+                                                                            <CustomTimePicker
+                                                                                value={slot.end_time}
+                                                                                onChange={(val) => handleTimeChange(dayIndex, slotIndex, 'end_time', val)}
+                                                                                theme={theme}
+                                                                                disabled={!schedule.is_open}
+                                                                            />
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Actions */}
+                                                                    {slotIndex === 0 ? (
+                                                                        <button
+                                                                            onClick={() => handleAddSlot(dayIndex)}
+                                                                            className={`w-11 h-11 flex-shrink-0 rounded-xl flex items-center justify-center transition-all ${theme === 'dark'
+                                                                                ? 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+                                                                                : 'bg-slate-100 text-slate-500 hover:text-slate-900 hover:bg-slate-200'}`}
+                                                                            title="Adicionar intervalo"
+                                                                        >
+                                                                            <Plus className="w-5 h-5" />
+                                                                        </button>
+                                                                    ) : (
+                                                                        <button
+                                                                            onClick={() => handleRemoveSlot(dayIndex, slotIndex)}
+                                                                            className={`w-11 h-11 flex-shrink-0 rounded-xl flex items-center justify-center transition-all group ${theme === 'dark'
+                                                                                ? 'text-red-400 hover:bg-red-900/20'
+                                                                                : 'bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-600'}`}
+                                                                            title="Remover horário"
+                                                                        >
+                                                                            <Trash2 className="w-5 h-5 opacity-70 group-hover:opacity-100" />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            ))
+                                                        ) : (
+                                                            <div className={`h-14 flex items-center px-6 rounded-xl border border-dashed ${theme === 'dark' ? 'border-slate-800 text-slate-600' : 'border-slate-200 text-slate-400 bg-slate-50/50'}`}>
+                                                                <span className="text-sm">Não há horários configurados para este dia.</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    );
-                                })}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         </div>
                     )}
@@ -451,6 +528,6 @@ export default function BusinessHoursSettings() {
                     )}
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

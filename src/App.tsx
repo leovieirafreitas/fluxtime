@@ -8,9 +8,16 @@ import Clients from './pages/Clients';
 import CompanySettings from './pages/CompanySettings';
 import TimezoneSettings from './pages/TimezoneSettings';
 import BusinessHoursSettings from './pages/BusinessHoursSettings';
+import SchedulingRules from './pages/SchedulingRules';
+import Team from './pages/Team';
+import PaymentSettings from './pages/PaymentSettings';
 import SiteCustomization from './pages/SiteCustomization';
 import PublicCompanyPage from './pages/PublicCompanyPage';
 import Services from './pages/Services';
+import NewService from './pages/NewService';
+import ServiceCategories from './pages/ServiceCategories';
+import ClientLogin from './pages/ClientLogin';
+import ClientDashboard from './pages/ClientDashboard';
 import { UserProfileProvider } from './contexts/UserProfileContext';
 
 
@@ -45,6 +52,10 @@ function App() {
     <BrowserRouter>
       <UserProfileProvider>
         <Routes>
+          {/* Client Portal Routes */}
+          <Route path="/client" element={<ClientLogin />} />
+          <Route path="/client/dashboard" element={<ClientDashboard />} />
+
           {/* Rota Pública - Página da Empresa */}
           <Route path="/:slug" element={<PublicCompanyPage />} />
 
@@ -73,12 +84,36 @@ function App() {
             element={session ? <BusinessHoursSettings /> : <Navigate to="/login" />}
           />
           <Route
+            path="/settings/rules"
+            element={session ? <SchedulingRules /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/settings/team"
+            element={session ? <Team /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/settings/payments"
+            element={session ? <PaymentSettings /> : <Navigate to="/login" />}
+          />
+          <Route
             path="/site/customization"
             element={session ? <SiteCustomization /> : <Navigate to="/login" />}
           />
           <Route
             path="/catalog/services"
             element={session ? <Services /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/catalog/combos"
+            element={session ? <ServiceCategories /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/catalog/services/new"
+            element={session ? <NewService /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/catalog/services/:id"
+            element={session ? <NewService /> : <Navigate to="/login" />}
           />
           <Route
             path="/"

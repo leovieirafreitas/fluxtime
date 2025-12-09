@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Menu, Search, Plus, MoreVertical, Eye, Download, Grid, List } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useUserProfileContext } from '../contexts/UserProfileContext';
@@ -7,18 +8,25 @@ import Sidebar from '../components/Sidebar';
 
 interface Service {
     id: string;
-    name: string;
+    title: string;
+    name?: string; // fallback
     description: string;
     price: number;
-    duration: number;
-    active: boolean;
+    duration_minutes: number;
+    duration: number; // fallback
+    visibility: string;
+    active?: boolean; // fallback
     sort_order: number;
     created_at: string;
+    reservation_fee: number | null;
+    is_reservation_fee_enabled: boolean;
+    location_type: string;
 }
 
 export default function Services() {
     const { profile } = useUserProfileContext();
     const { theme } = useTheme();
+    const navigate = useNavigate();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [services, setServices] = useState<Service[]>([]);
     const [loading, setLoading] = useState(true);
@@ -39,7 +47,7 @@ export default function Services() {
                 .from('services')
                 .select('*')
                 .eq('company_id', profile.company_id)
-                .order('sort_order', { ascending: true });
+                .order('created_at', { ascending: false });
 
             if (error) throw error;
             setServices(data || []);
@@ -54,20 +62,45 @@ export default function Services() {
         return new Intl.NumberFormat('pt-BR', {
             style: 'currency',
             currency: 'BRL',
-        }).format(price);
+        }).format(price || 0);
     };
 
     const formatDuration = (minutes: number) => {
+        if (!minutes) return '-';
         if (minutes < 60) return `${minutes} min`;
         const hours = Math.floor(minutes / 60);
         const mins = minutes % 60;
         return mins > 0 ? `${hours}h ${mins} min` : `${hours}h`;
     };
 
-    const filteredServices = services.filter(service =>
-        service.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        service.description?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const formatLocation = (type: string) => {
+        switch (type) {
+            case 'business_address': return 'Em meu estabelecimento';
+            case 'client_address': return 'No endereço do cliente';
+            case 'online': return 'Online';
+            default: return 'Em meu estabelecimento';
+        }
+    };
+
+    const formatVisibility = (visibility: string, active?: boolean) => {
+        // Fallback for old data
+        if (!visibility && active !== undefined) {
+            return active ? 'Público' : 'Privado';
+        }
+
+        switch (visibility) {
+            case 'public': return 'Público';
+            case 'private': return 'Privado';
+            case 'link_only': return 'Apenas Link';
+            default: return 'Público'; // Default
+        }
+    };
+
+    const filteredServices = services.filter(service => {
+        const name = service.title || service.name || '';
+        return name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            service.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    });
 
     return (
         <>
@@ -94,6 +127,7 @@ export default function Services() {
                             </span>
                         </div>
                         <button
+                            onClick={() => navigate('/catalog/services/new')}
                             className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
                         >
                             <Plus className="w-5 h-5" />
@@ -113,8 +147,8 @@ export default function Services() {
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className={`w-full pl-10 pr-4 py-2 rounded-lg border transition-colors ${theme === 'dark'
-                                        ? 'bg-slate-900 border-slate-700 text-white placeholder-slate-500'
-                                        : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400'
+                                    ? 'bg-slate-900 border-slate-700 text-white placeholder-slate-500'
+                                    : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400'
                                     }`}
                             />
                         </div>
@@ -137,10 +171,10 @@ export default function Services() {
                                 <button
                                     onClick={() => setViewMode('list')}
                                     className={`p-2 rounded-lg transition-colors ${viewMode === 'list'
-                                            ? 'bg-blue-600 text-white'
-                                            : theme === 'dark'
-                                                ? 'hover:bg-slate-700 text-slate-400'
-                                                : 'hover:bg-slate-100 text-slate-600'
+                                        ? 'bg-blue-600 text-white'
+                                        : theme === 'dark'
+                                            ? 'hover:bg-slate-700 text-slate-400'
+                                            : 'hover:bg-slate-100 text-slate-600'
                                         }`}
                                 >
                                     <List className="w-5 h-5" />
@@ -148,10 +182,10 @@ export default function Services() {
                                 <button
                                     onClick={() => setViewMode('grid')}
                                     className={`p-2 rounded-lg transition-colors ${viewMode === 'grid'
-                                            ? 'bg-blue-600 text-white'
-                                            : theme === 'dark'
-                                                ? 'hover:bg-slate-700 text-slate-400'
-                                                : 'hover:bg-slate-100 text-slate-600'
+                                        ? 'bg-blue-600 text-white'
+                                        : theme === 'dark'
+                                            ? 'hover:bg-slate-700 text-slate-400'
+                                            : 'hover:bg-slate-100 text-slate-600'
                                         }`}
                                 >
                                     <Grid className="w-5 h-5" />
@@ -214,12 +248,13 @@ export default function Services() {
                                     {filteredServices.map((service) => (
                                         <tr
                                             key={service.id}
-                                            className={`transition-colors ${theme === 'dark' ? 'hover:bg-slate-700/50' : 'hover:bg-slate-50'
+                                            onClick={() => navigate(`/catalog/services/${service.id}`)}
+                                            className={`transition-colors cursor-pointer ${theme === 'dark' ? 'hover:bg-slate-700/50' : 'hover:bg-slate-50'
                                                 }`}
                                         >
                                             <td className="px-6 py-4">
                                                 <div className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-                                                    {service.name}
+                                                    {service.title || service.name}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
@@ -229,17 +264,20 @@ export default function Services() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}>
-                                                    0%
+                                                    {service.is_reservation_fee_enabled
+                                                        ? formatPrice(service.reservation_fee || 0)
+                                                        : '0%'
+                                                    }
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}>
-                                                    {formatDuration(service.duration)}
+                                                    {formatDuration(service.duration_minutes || service.duration)}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                                                    Em meu estabelecimento
+                                                    {formatLocation(service.location_type)}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
@@ -250,11 +288,11 @@ export default function Services() {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${service.active
-                                                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                                        : 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-400'
+                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${(service.visibility === 'public' || (service.active && !service.visibility))
+                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                                    : 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-400'
                                                     }`}>
-                                                    {service.active ? 'Público' : 'Privado'}
+                                                    {formatVisibility(service.visibility, service.active)}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
