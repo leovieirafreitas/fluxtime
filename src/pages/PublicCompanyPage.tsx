@@ -338,10 +338,13 @@ export default function PublicCompanyPage() {
 
             if (isNewClient) {
                 // Create new client
+                // Normalize phone to +55 format
+                const cleanPhone = clientPhone.replace(/\D/g, '');
+                const normalizedPhone = cleanPhone.startsWith('55') ? `+${cleanPhone}` : `+55${cleanPhone}`;
+
                 const { data, error } = await supabase.from('clients').insert({
-                    phone: clientPhone, // Should be normalized? We used raw input for login, but let's stick to what we have. 
-                    // Actually, we should probably normalize to +55... but let's trust the input logic for now or normalize here.
-                    // The sendText logic normalized it.
+                    company_id: company.id,
+                    phone: normalizedPhone,
                     name: clientName,
                     email: clientEmail
                 }).select('id').single();
