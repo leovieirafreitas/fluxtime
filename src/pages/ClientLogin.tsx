@@ -68,11 +68,12 @@ export default function ClientLogin() {
 
         setIsLoading(true);
         const cleanPhone = phone.replace(/\D/g, '');
+        const normalizedPhone = cleanPhone.startsWith('55') ? `+${cleanPhone}` : `+55${cleanPhone}`;
 
         try {
             // Check if client exists in DB to prepopulate session
             let clientData = {
-                phone: cleanPhone,
+                phone: normalizedPhone,
                 name: '',
                 email: ''
             };
@@ -91,14 +92,14 @@ export default function ClientLogin() {
                 clientData.email = data.email || '';
             }
 
-            // Save session
+            // Save session with normalized phone
             localStorage.setItem('client_session', JSON.stringify(clientData));
             navigate('/client/dashboard');
 
         } catch (err) {
             console.error(err);
             // Even if DB fetch fails, we let them in as "New Client"
-            localStorage.setItem('client_session', JSON.stringify({ phone: cleanPhone, name: '', email: '' }));
+            localStorage.setItem('client_session', JSON.stringify({ phone: normalizedPhone, name: '', email: '' }));
             navigate('/client/dashboard');
         } finally {
             setIsLoading(false);
@@ -142,7 +143,7 @@ export default function ClientLogin() {
                             <input
                                 type="tel"
                                 placeholder="(11) 98765-4321"
-                                className="flex-1 h-10 px-3 rounded-lg border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
+                                className="flex-1 h-10 px-3 rounded-lg border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
                                 value={phone}
                                 onChange={handlePhoneChange}
                                 required
@@ -168,7 +169,7 @@ export default function ClientLogin() {
                                 type="text"
                                 placeholder="000000"
                                 maxLength={6}
-                                className="w-40 h-12 text-center text-2xl tracking-widest rounded-lg border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
+                                className="w-40 h-12 text-center text-2xl tracking-widest rounded-lg border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
                                 value={otp}
                                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                                 autoFocus

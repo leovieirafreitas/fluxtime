@@ -38,9 +38,9 @@ export default function ClientDashboard() {
             const parsed = JSON.parse(session);
             setClientName(parsed.name || 'Cliente');
 
+
             try {
                 // Try to find appointments by phone (most robust currently) or email
-                // Note: In production we should rely on a secure ID after Auth.
                 let query = supabase
                     .from('appointments')
                     .select(`
@@ -51,13 +51,21 @@ export default function ClientDashboard() {
                     .order('start_time', { ascending: true });
 
                 if (parsed.phone) {
-                    // Normalize phone for query if needed, but our DB has various formats. 
-                    // Let's search loosely or specifically. 
-                    // Ideally we stored the formatted phone in the booking.
-                    // Let's try matching the exact phone stored in localStorage first.
+                    // Normalize phone - remove all non-digits
                     const cleanPhone = parsed.phone.replace(/\D/g, '');
-                    // We search for phone with or without +55 because of our earlier chaos
-                    query = query.or(`client_phone.eq.${parsed.phone},client_phone.eq.+55${cleanPhone},client_phone.eq.${cleanPhone}`);
+
+                    // Create all possible phone formats to search
+                    const phoneVariations = [
+                        cleanPhone,                           // 11999999999
+                        `+55${cleanPhone}`,                   // +5511999999999
+                        `55${cleanPhone}`,                    // 5511999999999
+                        `(${cleanPhone.slice(0, 2)}) ${cleanPhone.slice(2, 7)}-${cleanPhone.slice(7)}`, // (11) 99999-9999
+                        `(${cleanPhone.slice(0, 2)}) ${cleanPhone.slice(2)}`, // (11) 999999999
+                    ];
+
+                    // Build OR query for all variations
+                    const orConditions = phoneVariations.map(v => `client_phone.eq.${v}`).join(',');
+                    query = query.or(orConditions);
                 } else if (parsed.email) {
                     query = query.eq('client_email', parsed.email);
                 }

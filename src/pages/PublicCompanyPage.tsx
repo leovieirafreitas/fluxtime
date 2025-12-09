@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { whatsappService } from '../services/whatsapp';
 import { MapPin, Clock, Star } from 'lucide-react';
+import DatePicker from '../components/DatePicker';
 
 interface Company {
     id: string;
@@ -267,6 +268,10 @@ export default function PublicCompanyPage() {
             const duration = Number(selectedService.duration_minutes || selectedService.duration || 30);
             const endTime = new Date(startTime.getTime() + duration * 60000);
 
+            // Normalize phone to +55 format for consistency
+            const cleanPhone = clientPhone.replace(/\D/g, '');
+            const normalizedPhone = cleanPhone.startsWith('55') ? `+${cleanPhone}` : `+55${cleanPhone}`;
+
             const { error } = await supabase.from('appointments').insert({
                 company_id: company.id,
                 client_id: finalClientId,
@@ -276,7 +281,7 @@ export default function PublicCompanyPage() {
                 end_time: endTime.toISOString(),
                 status: 'confirmed',
                 client_name: clientName,
-                client_phone: clientPhone,
+                client_phone: normalizedPhone,
                 client_email: clientEmail,
                 notes: clientObs,
             });
@@ -341,6 +346,8 @@ export default function PublicCompanyPage() {
                 // Normalize phone to +55 format
                 const cleanPhone = clientPhone.replace(/\D/g, '');
                 const normalizedPhone = cleanPhone.startsWith('55') ? `+${cleanPhone}` : `+55${cleanPhone}`;
+
+                if (!company) throw new Error("Empresa não encontrada");
 
                 const { data, error } = await supabase.from('clients').insert({
                     company_id: company.id,
@@ -809,35 +816,70 @@ export default function PublicCompanyPage() {
                                             </button>
                                             <h2 className="text-2xl font-bold text-slate-900">Data e horário</h2>
                                         </div>
-                                        <div className="bg-white rounded-xl border border-slate-200 p-6">
-                                            <div className="mb-6">
+                                        <div className="space-y-6">
+                                            {/* Date Picker with Dropdown */}
+                                            <div className="bg-white rounded-xl border border-slate-200 p-6">
                                                 <label className="block text-sm font-medium text-slate-700 mb-2">Data</label>
-                                                <input
-                                                    type="date"
-                                                    className="w-full p-3 rounded-lg border border-slate-300"
-                                                    value={selectedDate.toLocaleDateString('en-CA')}
-                                                    onChange={(e) => {
-                                                        const [y, m, d] = e.target.value.split('-').map(Number);
-                                                        setSelectedDate(new Date(y, m - 1, d));
-                                                    }}
-                                                />
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        readOnly
+                                                        value={selectedDate.toLocaleDateString('pt-BR')}
+                                                        onClick={() => {
+                                                            const dropdown = document.getElementById('date-picker-dropdown');
+                                                            if (dropdown) {
+                                                                dropdown.classList.toggle('hidden');
+                                                            }
+                                                        }}
+                                                        className="w-full p-3 rounded-lg border border-slate-300 bg-white text-slate-900 font-medium cursor-pointer hover:border-blue-500 transition-colors"
+                                                        placeholder="Selecione uma data"
+                                                    />
+                                                    <svg className="w-5 h-5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                    </svg>
+
+                                                    {/* Dropdown Calendar */}
+                                                    <div id="date-picker-dropdown" className="hidden absolute top-full left-0 mt-2 z-50">
+                                                        <DatePicker
+                                                            selectedDate={selectedDate}
+                                                            onDateChange={(date) => {
+                                                                setSelectedDate(date);
+                                                                const dropdown = document.getElementById('date-picker-dropdown');
+                                                                if (dropdown) {
+                                                                    dropdown.classList.add('hidden');
+                                                                }
+                                                            }}
+                                                            accentColor={accentColor}
+                                                            minDate={new Date()}
+                                                        />
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-slate-700 mb-3">Horários disponíveis</label>
 
-
-
+                                            {/* Time Slots */}
+                                            <div className="bg-white rounded-xl border border-slate-200 p-6">
+                                                <label className="block text-sm font-medium text-slate-700 mb-4">Horários disponíveis</label>
                                                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
                                                     {timeSlots.length === 0 ? (
-                                                        <div className="col-span-full text-center py-4 text-slate-500 border border-dashed border-slate-200 rounded-lg">
-                                                            Não há horários disponíveis para esta data. (Debug: {timeSlots.length})
+                                                        <div className="col-span-full text-center py-8 text-slate-500 border border-dashed border-slate-200 rounded-lg">
+                                                            <p className="font-medium mb-1">Nenhum horário disponível</p>
+                                                            <p className="text-xs">Selecione outra data</p>
                                                         </div>
                                                     ) : (
                                                         timeSlots.map(time => (
                                                             <button
                                                                 key={time}
                                                                 onClick={() => handleTimeSelect(time)}
-                                                                className="px-2 py-3 text-sm font-medium rounded-lg border border-slate-200 hover:bg-blue-50 hover:border-blue-500 hover:text-blue-600 transition-colors text-center"
+                                                                style={{ color: accentColor }}
+                                                                className="px-3 py-3 text-sm font-bold rounded-lg border-2 hover:bg-blue-50 transition-all hover:scale-105 text-center"
+                                                                onMouseEnter={(e) => {
+                                                                    e.currentTarget.style.borderColor = accentColor;
+                                                                    e.currentTarget.style.backgroundColor = `${accentColor}15`;
+                                                                }}
+                                                                onMouseLeave={(e) => {
+                                                                    e.currentTarget.style.borderColor = '#e2e8f0';
+                                                                    e.currentTarget.style.backgroundColor = 'transparent';
+                                                                }}
                                                             >
                                                                 {time}
                                                             </button>
@@ -872,7 +914,7 @@ export default function PublicCompanyPage() {
                                                         <input
                                                             type="tel"
                                                             placeholder="(11) 99999-9999"
-                                                            className="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                                                            className="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500"
                                                             value={clientPhone}
                                                             onChange={(e) => {
                                                                 let val = e.target.value;
@@ -929,7 +971,7 @@ export default function PublicCompanyPage() {
                                                                 type="text"
                                                                 value={clientName}
                                                                 onChange={(e) => setClientName(e.target.value)}
-                                                                className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                                                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500"
                                                                 placeholder="Seu nome"
                                                             />
                                                         </div>
@@ -939,7 +981,7 @@ export default function PublicCompanyPage() {
                                                                 type="email"
                                                                 value={clientEmail}
                                                                 onChange={(e) => setClientEmail(e.target.value)}
-                                                                className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                                                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500"
                                                                 placeholder="Seu melhor e-mail"
                                                             />
                                                         </div>
@@ -949,7 +991,7 @@ export default function PublicCompanyPage() {
                                                                 rows={2}
                                                                 value={clientObs}
                                                                 onChange={(e) => setClientObs(e.target.value)}
-                                                                className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                                                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500"
                                                                 placeholder="Alguma observação para o agendamento?"
                                                             />
                                                         </div>
@@ -991,7 +1033,7 @@ export default function PublicCompanyPage() {
                                             <input
                                                 type="text"
                                                 placeholder="Digite o código enviado no WhatsApp"
-                                                className="w-full px-4 py-3 border border-slate-300 rounded-xl mb-6 text-lg outline-none focus:ring-2 focus:ring-blue-500"
+                                                className="w-full px-4 py-3 border border-slate-300 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 mb-6 text-lg outline-none focus:ring-2 focus:ring-blue-500"
                                                 value={verificationCode}
                                                 onChange={(e) => setVerificationCode(e.target.value)}
                                             />
