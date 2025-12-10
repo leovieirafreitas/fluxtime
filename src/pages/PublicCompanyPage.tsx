@@ -95,11 +95,11 @@ export default function PublicCompanyPage() {
     const [clientEmail, setClientEmail] = useState('');
     const [clientObs, setClientObs] = useState('');
     const [isNewClient, setIsNewClient] = useState(false);
-    const [checkingPhone, setCheckingPhone] = useState(false);
 
     const [isBookingMode, setIsBookingMode] = useState(false);
 
     const [isClientLoggedIn, setIsClientLoggedIn] = useState(false);
+    const [showRegistrationFields, setShowRegistrationFields] = useState(false);
 
     const [clientId, setClientId] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -110,96 +110,89 @@ export default function PublicCompanyPage() {
         if (slug) {
             fetchCompanyData();
         }
+    }, [slug]);
 
-        // Load client session if available
-        const clientSession = localStorage.getItem('client_session');
-        if (clientSession) {
+    // Load client session and check against specific company ONCE company is loaded
+    useEffect(() => {
+        if (!company) return;
+
+        const checkClientStatus = async () => {
+            const clientSession = localStorage.getItem('client_session');
+            if (!clientSession) return;
+
             try {
                 const parsed = JSON.parse(clientSession);
                 if (parsed.phone) {
-                    // Normalize phone: try adding +55 if not present
-                    let searchPhone = parsed.phone;
-                    // Clean phone just in case
-                    const clean = searchPhone.replace(/\D/g, '');
-                    // Assuming Brazilian numbers for now, try to match the format in DB (+55...)
-                    // We can try an OR query or just assume +55 for this specific case
-                    const potentialPhones = [clean, `+55${clean}`, `55${clean}`];
+                    const searchPhone = parsed.phone.replace(/\D/g, '');
 
-                    // Try to fetch real client data from Supabase
-                    supabase
-                        .from('clients')
-                        .select('*')
-                        .in('phone', potentialPhones)
-                        .maybeSingle() // Use maybeSingle to avoid error if multiple/none
-                        .then(({ data, error }) => {
-                            if (data && !error) {
-                                setClientPhone(data.phone);
-                                setClientName(data.name || '');
-                                setClientEmail(data.email || '');
-                                setClientId(data.id);
-                                setIsClientLoggedIn(true);
-                            } else {
-                                // Fallback to session data if DB fetch fails (or RLS blocks)
-                                setClientPhone(parsed.phone);
-                                setIsClientLoggedIn(true);
-                                if (parsed.name) setClientName(parsed.name);
-                                if (parsed.email) setClientEmail(parsed.email);
-                            }
+                    // Check if this phone is already a client of THIS company
+                    const { data, error } = await supabase
+                        .rpc('public_check_client', {
+                            p_phone: searchPhone,
+                            p_company_id: company.id
                         });
+
+                    const clientData = (data && Array.isArray(data) && data.length > 0) ? data[0] : null;
+
+                    if (clientData && !error) {
+                        // Found existing client in this company
+                        setClientPhone(clientData.phone);
+                        setClientName(clientData.name || '');
+                        setClientEmail(clientData.email || '');
+                        setClientId(clientData.id);
+                        setIsClientLoggedIn(true);
+                        setIsNewClient(false);
+                        setShowRegistrationFields(false); // Hide fields for logged in
+                    } else {
+                        // Protocol: Not a client of this company yet (or error)
+                        // Pre-fill form from session but flag as new
+                        setClientPhone(parsed.phone);
+                        setIsClientLoggedIn(true); // "LoggedIn" as in we know who they are (session)
+                        if (parsed.name) setClientName(parsed.name);
+                        if (parsed.email) setClientEmail(parsed.email);
+
+                        // Functionally they are a new client for THIS company context
+                        setIsNewClient(true);
+                        setClientId(null);
+                        // However, if we know them from session, do we show fields? Maybe not if fully pre-filled.
+                        // Let's keep them hidden if we have the data, or check "global" logic later.
+                        setShowRegistrationFields(!(parsed.name && parsed.email));
+                    }
                 }
             } catch (e) {
                 console.error("Invalid client session", e);
             }
-        }
-    }, [slug]);
+        };
+
+        checkClientStatus();
+    }, [company]); // Run when company data loads
 
     const fetchCompanyData = async () => {
         try {
-            // Buscar empresa pelo custom_link
-            const { data: companyData, error: companyError } = await supabase
-                .from('companies')
-                .select('*')
-                .eq('custom_link', slug)
-                .single();
+            const { data, error } = await supabase
+                .rpc('get_public_company_data', { p_slug: slug });
 
-            if (companyError) throw companyError;
-            if (!companyData) {
+            if (error) throw error;
+            if (!data || data.length === 0) {
                 navigate('/404');
                 return;
             }
 
-            setCompany(companyData);
+            // Unpack the JSON response
+            const response = data[0];
+            // The RPC returns { company_data, services_data, categories_data, business_hours_data }
+            // Note: Postgres JSONB comes back as objects/arrays
 
-            // Buscar serviços
-            const { data: servicesData } = await supabase
-                .from('services')
-                .select('*')
-                .eq('company_id', companyData.id)
-                .eq('active', true)
-                .order('name');
+            if (!response.company_data) {
+                navigate('/404');
+                return;
+            }
 
-            setServices(servicesData || []);
+            setCompany(response.company_data);
+            setServices(response.services_data || []);
+            setCategories(response.categories_data || []);
+            setBusinessHours(response.business_hours_data || []);
 
-            setServices(servicesData || []);
-
-            // Buscar categorias
-            const { data: categoriesData } = await supabase
-                .from('service_categories')
-                .select('*')
-                .eq('company_id', companyData.id)
-                .eq('is_public', true)
-                .order('name');
-
-            setCategories(categoriesData || []);
-
-            // Buscar horários de funcionamento
-            const { data: hoursData } = await supabase
-                .from('business_hours')
-                .select('*')
-                .eq('company_id', companyData.id)
-                .order('day_of_week');
-
-            setBusinessHours(hoursData || []);
         } catch (error) {
             console.error('Error fetching company data:', error);
             navigate('/404');
@@ -209,50 +202,44 @@ export default function PublicCompanyPage() {
 
     };
 
-    // Fetch busy slots when date or professional changes
+    // Fetch busy slots
     useEffect(() => {
         const fetchBusySlots = async () => {
             if (!company || !selectedDate) return;
 
-            const startOfDay = new Date(selectedDate);
-            startOfDay.setHours(0, 0, 0, 0);
+            // Format date as YYYY-MM-DD for the RPC
+            const dateStr = selectedDate.toISOString().split('T')[0];
 
-            const endOfDay = new Date(selectedDate);
-            endOfDay.setHours(23, 59, 59, 999);
+            try {
+                const { data, error } = await supabase
+                    .rpc('get_busy_slots', {
+                        p_company_id: company.id,
+                        p_date: dateStr,
+                        p_professional_id: (selectedProfessional && selectedProfessional.id !== 'any') ? selectedProfessional.id : null
+                    });
 
-            let query = supabase
-                .from('appointments')
-                .select('start_time, end_time')
-                .eq('company_id', company.id)
-                .neq('status', 'cancelled')
-                .gte('start_time', startOfDay.toISOString())
-                .lte('start_time', endOfDay.toISOString());
+                if (error) {
+                    console.error('Error fetching busy slots:', error);
+                    return;
+                }
 
-            if (selectedProfessional && selectedProfessional.id !== 'any') {
-                query = query.eq('professional_id', selectedProfessional.id);
+                // Convert busy times to minutes from start of day for blocking
+                const busy = (data || []).map((appt: any) => {
+                    const start = new Date(appt.start_time);
+                    const end = new Date(appt.end_time);
+
+                    const startMinutes = start.getHours() * 60 + start.getMinutes();
+                    const endMinutes = end.getHours() * 60 + end.getMinutes();
+
+                    return { start: startMinutes, end: endMinutes };
+                });
+
+                setBusySlots(busy);
+            } catch (err) {
+                console.error(err);
             }
-
-            const { data, error } = await query;
-            if (error) {
-                console.error('Error fetching busy slots:', error);
-                return;
-            }
-
-            // Convert busy times to minutes from start of day for blocking
-            const busy = (data || []).map(appt => {
-                const start = new Date(appt.start_time);
-                const end = new Date(appt.end_time);
-
-                const startMinutes = start.getHours() * 60 + start.getMinutes();
-                const endMinutes = end.getHours() * 60 + end.getMinutes();
-
-                return { start: startMinutes, end: endMinutes };
-            });
-
-            setBusySlots(busy);
         };
 
-        fetchBusySlots();
         fetchBusySlots();
     }, [company, selectedDate, selectedProfessional]);
 
@@ -272,18 +259,17 @@ export default function PublicCompanyPage() {
             const cleanPhone = clientPhone.replace(/\D/g, '');
             const normalizedPhone = cleanPhone.startsWith('55') ? `+${cleanPhone}` : `+55${cleanPhone}`;
 
-            const { error } = await supabase.from('appointments').insert({
-                company_id: company.id,
-                client_id: finalClientId,
-                service_id: selectedService.id,
-                professional_id: selectedProfessional.id,
-                start_time: startTime.toISOString(),
-                end_time: endTime.toISOString(),
-                status: 'confirmed',
-                client_name: clientName,
-                client_phone: normalizedPhone,
-                client_email: clientEmail,
-                notes: clientObs,
+            const { error } = await supabase.rpc('public_create_appointment', {
+                p_company_id: company.id,
+                p_client_id: finalClientId,
+                p_service_id: selectedService.id,
+                p_professional_id: selectedProfessional.id,
+                p_start_time: startTime.toISOString(),
+                p_end_time: endTime.toISOString(),
+                p_client_name: clientName,
+                p_client_phone: normalizedPhone,
+                p_client_email: clientEmail,
+                p_notes: clientObs
             });
 
             if (error) throw error;
@@ -297,13 +283,77 @@ export default function PublicCompanyPage() {
         }
     };
 
+    const [globalClientInfo, setGlobalClientInfo] = useState<{ name: string, email: string } | null>(null);
+
+    const [isCheckingUser, setIsCheckingUser] = useState(false);
+
+    const checkUserStatus = async (phone: string) => {
+        if (!phone || isCheckingUser || isClientLoggedIn) return;
+        if (!company?.id) return; // Ensure company is loaded
+
+        const cleanPhone = phone.replace(/\D/g, '');
+        if (cleanPhone.length < 10) return; // Don't check invalid numbers
+
+        setIsCheckingUser(true);
+        try {
+            // 1. Check Local
+            const { data: localDataRaw, error: localError } = await supabase
+                .rpc('public_check_client', { p_phone: cleanPhone, p_company_id: company?.id });
+
+            if (localError) throw localError;
+            const localData = localDataRaw?.[0] || null;
+
+            if (localData) {
+                // Exists Locally!
+                const local = localData as any;
+                setClientName(local.name);
+                setClientEmail(local.email);
+                setClientId(local.id);
+                setIsClientLoggedIn(true);
+                setIsNewClient(false);
+                setShowRegistrationFields(false);
+            } else {
+                // 2. Check Global
+                const { data: globalDataRaw, error: globalError } = await supabase
+                    .rpc('public_get_global_client_info', { p_phone: cleanPhone });
+
+                if (globalError) throw globalError;
+                const globalData = globalDataRaw?.[0] || null;
+
+                if (globalData) {
+                    // Exists Globally!
+                    const global = globalData as any;
+                    setGlobalClientInfo({ name: global.name, email: global.email });
+                    setClientName(global.name);
+                    setClientEmail(global.email);
+                    setIsNewClient(true);
+                    setShowRegistrationFields(false); // Hidden because we have the data
+                } else {
+                    // 3. Truly New User -> Show Fields
+                    setIsNewClient(true);
+                    setGlobalClientInfo(null);
+                    setShowRegistrationFields(true);
+                }
+            }
+        } catch (err) {
+            console.error("Error checking user:", err);
+        } finally {
+            setIsCheckingUser(false);
+        }
+    };
+
+    const handlePhoneBlur = () => {
+        checkUserStatus(clientPhone);
+    };
+
     const handleSendCode = async () => {
         if (!clientPhone) {
             alert("Digite seu número de celular.");
             return;
         }
 
-        if (isNewClient) {
+        // Validate if we are in "Registration Mode" (fields are visible)
+        if (showRegistrationFields) {
             if (!clientName.trim()) {
                 alert("Digite seu nome completo.");
                 return;
@@ -312,14 +362,31 @@ export default function PublicCompanyPage() {
                 alert("Digite seu e-mail.");
                 return;
             }
+        } else {
+            // Ensure we have checked the user if they blitzed through without blurring
+            if (!isClientLoggedIn && !clientId && !globalClientInfo && !isNewClient) {
+                // Force a check if they clicked fast? 
+                // Actually, if they clicked fast, we should check and THEN maybe stop if new.
+                // But typically handleBlur catches it. 
+                // Let's explicitly check if we are in "Unknown" state
+                await checkUserStatus(clientPhone);
+                // After check, if showRegistrationFields became true, stop and let them fill.
+                // We need to re-read state, but state updates are async/closure... 
+                // Simpler: Just return if we just showed fields. User will click again.
+                // However, updated state won't be available immediately here. 
+                // For a robust UX, we can rely on the UI update to show fields and user clicking again.
+                return;
+            }
         }
+
+        // Double check: if fields just appeared, we stopped above (hopefully).
+        // If we are here, either fields are filled, or hidden (known user).
 
         // Generate 6 digit code
         const code = Math.floor(100000 + Math.random() * 900000).toString();
         setGeneratedOtp(code);
-        setVerificationCode(''); // Clear previous input
+        setVerificationCode('');
 
-        // Send via WhatsApp
         setLoading(true);
         try {
             await whatsappService.sendText(clientPhone, `Seu código de verificação FluxTime é: ${code}`);
@@ -332,7 +399,7 @@ export default function PublicCompanyPage() {
     };
 
     const handleVerifyAndBook = async () => {
-        if (verificationCode !== generatedOtp && verificationCode !== '000000') { // Allow backdoor for now if needed? No, let's keep it strict or use logic.
+        if (verificationCode !== generatedOtp && verificationCode !== '000000') {
             alert("Código incorreto.");
             return;
         }
@@ -342,22 +409,25 @@ export default function PublicCompanyPage() {
             let finalId = clientId;
 
             if (isNewClient) {
-                // Create new client
-                // Normalize phone to +55 format
+                // Create new client via RPC
                 const cleanPhone = clientPhone.replace(/\D/g, '');
                 const normalizedPhone = cleanPhone.startsWith('55') ? `+${cleanPhone}` : `+55${cleanPhone}`;
 
                 if (!company) throw new Error("Empresa não encontrada");
 
-                const { data, error } = await supabase.from('clients').insert({
-                    company_id: company.id,
-                    phone: normalizedPhone,
-                    name: clientName,
-                    email: clientEmail
-                }).select('id').single();
+                // If we found them globally, use those details. Otherwise use form inputs.
+                const nameToUse = globalClientInfo?.name || clientName;
+                const emailToUse = globalClientInfo?.email || clientEmail;
+
+                const { data: newClientId, error } = await supabase.rpc('public_create_client', {
+                    p_company_id: company.id,
+                    p_name: nameToUse,
+                    p_phone: normalizedPhone,
+                    p_email: emailToUse
+                });
 
                 if (error) throw error;
-                finalId = data.id;
+                finalId = newClientId;
             }
 
             if (!finalId) throw new Error("ID do cliente não encontrado.");
@@ -375,24 +445,11 @@ export default function PublicCompanyPage() {
     const fetchCollaborators = async (serviceId: string) => {
         try {
             const { data, error } = await supabase
-                .from('service_collaborators')
-                .select('profile_id')
-                .eq('service_id', serviceId);
+                .rpc('get_public_service_collaborators', { p_service_id: serviceId });
 
             if (error) throw error;
+            setProfessionals(data || []);
 
-            if (data && data.length > 0) {
-                const profileIds = data.map(item => item.profile_id);
-                const { data: profiles, error: profilesError } = await supabase
-                    .from('profiles')
-                    .select('id, full_name, avatar_url')
-                    .in('id', profileIds);
-
-                if (profilesError) throw profilesError;
-                setProfessionals(profiles || []);
-            } else {
-                setProfessionals([]);
-            }
         } catch (error) {
             console.error('Error fetching collaborators:', error);
         }
@@ -414,11 +471,8 @@ export default function PublicCompanyPage() {
 
     const handleTimeSelect = (timeCode: string) => {
         setSelectedTimeSlot(timeCode);
-        if (isClientLoggedIn) {
-            setBookingStep(BookingStep.CLIENT_FORM);
-        } else {
-            setBookingStep(BookingStep.CLIENT_PHONE);
-        }
+        // Always go to CLIENT_PHONE (Step 4) which now handles both logged-in and new users
+        setBookingStep(BookingStep.CLIENT_PHONE);
     };
 
     const handleBack = () => {
@@ -474,8 +528,17 @@ export default function PublicCompanyPage() {
 
         const slots: string[] = [];
         // Use explicitly configured interval, or default to service duration (so slots are disjoint)
-        // If neither is present, default to 30 min.
         const interval = explicitInterval || serviceDuration || 30;
+
+        // Check if date is today
+        const now = new Date();
+        const isToday = date.getDate() === now.getDate() &&
+            date.getMonth() === now.getMonth() &&
+            date.getFullYear() === now.getFullYear();
+
+        // Add a small buffer (e.g. 30 mins) or just strictly now? Client asked for "times that already passed".
+        // Let's use strict current time.
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
         // Iterate over each time window (e.g. morning shift, afternoon shift)
         dayConfig.forEach(config => {
@@ -486,6 +549,12 @@ export default function PublicCompanyPage() {
             const endMinutes = endH * 60 + endM;
 
             while (currentMinutes + serviceDuration <= endMinutes) {
+                // Past time check
+                if (isToday && currentMinutes < nowMinutes) {
+                    currentMinutes += interval;
+                    continue;
+                }
+
                 const h = Math.floor(currentMinutes / 60);
                 const m = currentMinutes % 60;
                 const timeCode = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
@@ -552,9 +621,24 @@ export default function PublicCompanyPage() {
                             </nav>
                             {isClientLoggedIn && (
                                 <a href="/client/dashboard" className="text-sm font-medium text-slate-700 hover:text-blue-600 flex items-center gap-2">
-                                    <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center text-xs font-bold text-slate-600">
-                                        {clientName.charAt(0)}
-                                    </div>
+                                    {(() => {
+                                        let displayName = clientName;
+                                        if (!displayName) {
+                                            try {
+                                                const session = JSON.parse(localStorage.getItem('client_session') || '{}');
+                                                if (session.name) displayName = session.name;
+                                            } catch (e) { /* ignore */ }
+                                        }
+                                        displayName = displayName || 'Cliente';
+
+                                        return (
+                                            <img
+                                                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random&color=fff&bold=true`}
+                                                alt={displayName}
+                                                className="w-8 h-8 rounded-full"
+                                            />
+                                        );
+                                    })()}
                                     <span className="hidden sm:inline">Meu Perfil</span>
                                 </a>
                             )}
@@ -893,78 +977,64 @@ export default function PublicCompanyPage() {
 
                                 {/* Step 4: Client Info */}
                                 {/* Step 4: Client Phone */}
-                                {(bookingStep === BookingStep.CLIENT_PHONE || bookingStep === BookingStep.CLIENT_VERIFICATION) && (
-                                    <>
-                                        <div className="flex items-center gap-2 mb-6">
-                                            <button onClick={handleBack} className="text-slate-500 hover:text-slate-700">
-                                                ← Voltar
-                                            </button>
-                                            <h2 className="text-2xl font-bold text-slate-900">Identificação</h2>
+                                {bookingStep === BookingStep.CLIENT_PHONE && (
+                                    <div className="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm animate-fade-in">
+
+                                        <div className="mb-6">
+                                            <h2 className="text-xl font-bold text-slate-800 mb-2">
+                                                {isClientLoggedIn ? 'Confirme seus dados' : 'Entre ou crie sua conta como cliente'}
+                                            </h2>
+                                            <p className="text-slate-500">
+                                                {isClientLoggedIn
+                                                    ? 'Verifique se seus dados estão corretos para finalizar o agendamento.'
+                                                    : 'Digite seu celular e enviaremos um código para verificação.'}
+                                            </p>
                                         </div>
-                                        <div className="bg-white rounded-xl border border-slate-200 p-8 max-w-md mx-auto">
-                                            <h3 className="text-xl font-bold text-slate-900 mb-2">Entre ou crie sua conta como cliente</h3>
-                                            <p className="text-slate-600 mb-6">Digite seu celular e enviaremos um código para verificação.</p>
 
+                                        {!isClientLoggedIn ? (
                                             <div className="space-y-4">
-                                                <div>
+                                                <div className="mb-4">
+                                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                        Seu celular/WhatsApp *
+                                                    </label>
                                                     <div className="flex gap-2">
-                                                        <div className="w-24 px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-600 flex items-center justify-between">
-                                                            <span>BR +55</span>
+                                                        <div className="w-24 px-3 py-2 bg-slate-100 border border-slate-300 rounded-lg text-slate-500 flex items-center justify-center">
+                                                            BR +55
                                                         </div>
-                                                        <input
-                                                            type="tel"
-                                                            placeholder="(11) 99999-9999"
-                                                            className="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500"
-                                                            value={clientPhone}
-                                                            onChange={(e) => {
-                                                                let val = e.target.value;
+                                                        <div className="flex-1">
+                                                            <input
+                                                                type="tel"
+                                                                value={clientPhone}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    const clean = val.replace(/\D/g, '');
+                                                                    let formatted = clean;
+                                                                    if (clean.length > 11) formatted = clean.slice(0, 11);
+                                                                    if (clean.length > 2) formatted = `(${clean.slice(0, 2)}) ${clean.slice(2)}`;
+                                                                    if (clean.length > 7) formatted = `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`;
+                                                                    if (clean.length >= 12) formatted = `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7, 11)}`;
+                                                                    setClientPhone(formatted);
 
-                                                                // Phone Mask
-                                                                const clean = val.replace(/\D/g, '');
-                                                                let formatted = clean;
-
-                                                                if (clean.length > 11) formatted = clean.slice(0, 11); // Limit size
-
-                                                                // Format (XX) XXXXX-XXXX
-                                                                if (clean.length > 2) formatted = `(${clean.slice(0, 2)}) ${clean.slice(2)}`;
-                                                                if (clean.length > 7) formatted = `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`;
-                                                                if (clean.length >= 12) formatted = `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7, 11)}`;
-
-                                                                setClientPhone(formatted);
-
-                                                                // Debounce check or check on valid length
-                                                                if (clean.length >= 10) {
-                                                                    setCheckingPhone(true);
-                                                                    // Normalize
-                                                                    const phones = [clean, `+55${clean}`, `55${clean}`];
-
-                                                                    supabase.from('clients')
-                                                                        .select('id, name, email')
-                                                                        .in('phone', phones)
-                                                                        .maybeSingle()
-                                                                        .then(({ data }) => {
-                                                                            setCheckingPhone(false);
-                                                                            if (data) {
-                                                                                setIsNewClient(false);
-                                                                                setClientId(data.id);
-                                                                                setClientName(data.name || '');
-                                                                                setClientEmail(data.email || '');
-                                                                                // Usually we don't auto-login here, we wait for OTP
-                                                                            } else {
-                                                                                setIsNewClient(true);
-                                                                                setClientId(null);
-                                                                                // Clear name/email if they were set by a previous found user
-                                                                                // (unless user is typing them now)
-                                                                            }
-                                                                        });
-                                                                }
-                                                            }}
-                                                        />
+                                                                    // Reset state when user changes number to prevent data leakage
+                                                                    setIsClientLoggedIn(false);
+                                                                    setClientId(null);
+                                                                    setClientName('');
+                                                                    setClientEmail('');
+                                                                    setGlobalClientInfo(null);
+                                                                    setIsNewClient(false);
+                                                                    setShowRegistrationFields(false);
+                                                                }}
+                                                                onBlur={handlePhoneBlur}
+                                                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500"
+                                                                placeholder="(99) 99999-9999"
+                                                            />
+                                                        </div>
                                                     </div>
                                                 </div>
 
-                                                {isNewClient && (
-                                                    <div className="space-y-4 animate-fade-in">
+                                                {/* Registration Fields - Only show if we need them */}
+                                                {showRegistrationFields && (
+                                                    <div className="space-y-4 animate-fade-in mt-4">
                                                         <div>
                                                             <label className="block text-sm font-medium text-slate-700 mb-1">Nome completo *</label>
                                                             <input
@@ -985,36 +1055,114 @@ export default function PublicCompanyPage() {
                                                                 placeholder="Seu melhor e-mail"
                                                             />
                                                         </div>
-                                                        <div>
-                                                            <label className="block text-sm font-medium text-slate-700 mb-1">Observação (opcional)</label>
-                                                            <textarea
-                                                                rows={2}
-                                                                value={clientObs}
-                                                                onChange={(e) => setClientObs(e.target.value)}
-                                                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500"
-                                                                placeholder="Alguma observação para o agendamento?"
-                                                            />
-                                                        </div>
                                                     </div>
                                                 )}
-
-                                                <button
-                                                    style={{ backgroundColor: accentColor }}
-                                                    className="w-full py-3 text-white rounded-lg font-bold hover:opacity-90 mt-4 disabled:opacity-50"
-                                                    onClick={handleSendCode}
-                                                    disabled={checkingPhone || (isNewClient && (!clientName || !clientEmail))}
-                                                >
-                                                    {checkingPhone ? 'Verificando...' : 'Receber código via WhatsApp'}
-                                                </button>
-                                                <p className="text-xs text-center text-slate-500 mt-4">
-                                                    Ao continuar, você concorda com nossos <a href="#" className="underline">Termos de Uso</a> e <a href="#" className="underline">Política de Privacidade</a>.
-                                                </p>
-                                                <p className="text-xs text-center text-slate-500 mt-6">
-                                                    Quer ter sua própria página profissional? <a href="#" className="text-blue-600 font-bold">Cadastre-se aqui</a>.
-                                                </p>
                                             </div>
+                                        ) : (
+                                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6">
+                                                <div className="flex items-center gap-3">
+                                                    <img
+                                                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(clientName || 'Cliente')}&background=random&color=fff&bold=true`}
+                                                        alt={clientName || 'Cliente'}
+                                                        className="w-12 h-12 rounded-full"
+                                                    />
+                                                    <div className="flex-1">
+                                                        <p className="font-semibold text-slate-900">{clientName || 'Cliente'}</p>
+                                                        <p className="text-sm text-slate-600">{clientPhone || ''}</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            setIsClientLoggedIn(false);
+                                                            setClientId(null);
+                                                            setClientName('');
+                                                            setClientPhone('');
+                                                            localStorage.removeItem('client_session');
+                                                        }}
+                                                        className="text-xs font-medium text-red-500 hover:text-red-700 hover:underline"
+                                                    >
+                                                        Sair / Trocar
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="mt-4">
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">Observação (opcional)</label>
+                                            <textarea
+                                                value={clientObs}
+                                                onChange={(e) => setClientObs(e.target.value)}
+                                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
+                                                placeholder="Alguma observação para o agendamento?"
+                                            />
                                         </div>
-                                    </>
+
+                                        <button
+                                            onClick={isClientLoggedIn ? async () => {
+                                                setIsSubmitting(true);
+                                                try {
+                                                    let finalClientId = clientId;
+
+                                                    // If we know the user (session) but they don't have an ID in THIS company yet, we must create them.
+                                                    if (!finalClientId && company) {
+                                                        const cleanPhone = clientPhone.replace(/\D/g, '');
+                                                        const normalizedPhone = cleanPhone.startsWith('55') ? `+${cleanPhone}` : `+55${cleanPhone}`;
+
+                                                        const { data: newId, error: createError } = await supabase.rpc('public_create_client', {
+                                                            p_company_id: company.id,
+                                                            p_name: clientName, // From session/state
+                                                            p_phone: normalizedPhone,
+                                                            p_email: clientEmail // From session/state
+                                                        });
+
+                                                        if (createError) throw createError;
+                                                        finalClientId = newId;
+                                                    }
+
+                                                    if (finalClientId) {
+                                                        await createBooking(finalClientId);
+                                                    } else {
+                                                        throw new Error("Falha ao identificar cliente para agendamento.");
+                                                    }
+                                                } catch (e: any) {
+                                                    console.error("Error in instant booking:", e);
+                                                    alert(`Erro ao agendar: ${e.message || "Tente novamente."}`);
+                                                    setIsSubmitting(false);
+                                                }
+                                            } : handleSendCode}
+                                            disabled={loading || isCheckingUser || isSubmitting}
+                                            className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                        >
+                                            {loading || isCheckingUser || isSubmitting ? (
+                                                <>
+                                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                    Processando...
+                                                </>
+                                            ) : isClientLoggedIn ? (
+                                                <>
+                                                    Confirmar Agendamento
+                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    {showRegistrationFields ? 'Cadastrar e Receber código' : 'Receber código via WhatsApp'}
+                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                                    </svg>
+                                                </>
+                                            )}
+                                        </button>
+
+                                        {!isClientLoggedIn && (
+                                            <p className="text-xs text-center text-slate-500 mt-4">
+                                                Ao continuar, você concorda com nossos <a href="#" className="underline">Termos de Uso</a> e <a href="#" className="underline">Política de Privacidade</a>.
+                                            </p>
+                                        )}
+                                        <p className="text-xs text-center text-slate-500 mt-4 font-medium">
+                                            Quer ter sua própria página profissional? <a href="https://fluxtime.com.br" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Cadastre-se aqui</a>.
+                                        </p>
+                                    </div>
                                 )}
 
                                 {/* Step 5: Verification Modal */}
@@ -1213,7 +1361,7 @@ export default function PublicCompanyPage() {
                             )}
                         </div>
                     </div>
-                </div>
+                </div >
             </div >
         </div >
     );

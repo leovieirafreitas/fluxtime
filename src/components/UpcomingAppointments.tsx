@@ -1,55 +1,54 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Clock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useUserProfile } from '../hooks/useUserProfile';
+import { dashboardCache, type UpcomingAppointment } from '../lib/dashboardCache';
 
-interface Appointment {
-    id: string;
-    client_name: string;
-    service: { name: string; price: number };
-    start_time: string;
-    status: 'confirmed' | 'pending' | 'cancelled';
-}
+interface Appointment extends UpcomingAppointment { }
 
 export default function UpcomingAppointments() {
-    const [appointments, setAppointments] = useState<Appointment[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { profile } = useUserProfile();
+    const [appointments, setAppointments] = useState<Appointment[]>(dashboardCache.appointments || []);
+    const [loading, setLoading] = useState(!dashboardCache.appointments);
 
     useEffect(() => {
         const fetchAppointments = async () => {
-            // 1. Get current user
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return; // Or redirect
+            if (!profile?.company_id) return;
 
-            // 2. Get company for this user
-            const { data: companyData } = await supabase
-                .from('companies')
-                .select('id')
-                .eq('owner_id', user.id)
-                .single();
+            // Check cache
+            if (dashboardCache.appointments) {
+                setAppointments(dashboardCache.appointments);
+                setLoading(false);
+                return;
+            }
 
-            if (companyData) {
-                // 3. Get appointments
-                const { data } = await supabase
-                    .from('appointments')
-                    .select(`
-                        id,
-                        client_name,
-                        start_time,
-                        status,
-                        service:services(name, price)
-                    `)
-                    .eq('company_id', companyData.id)
-                    .gte('start_time', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()) // From start of today
-                    .order('start_time', { ascending: true })
-                    .limit(5);
+            // 3. Get appointments
+            const { data } = await supabase
+                .from('appointments')
+                .select(`
+                    id,
+                    client_name,
+                    start_time,
+                    status,
+                    service:services(name, price)
+                `)
+                .eq('company_id', profile.company_id)
+                .gte('start_time', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()) // From start of today
+                .order('start_time', { ascending: true })
+                .limit(5);
 
-                if (data) setAppointments(data as any);
+            if (data) {
+                const typedData = data as any as Appointment[];
+                dashboardCache.appointments = typedData;
+                setAppointments(typedData);
             }
             setLoading(false);
         };
 
-        fetchAppointments();
-    }, []);
+        if (profile?.company_id) {
+            fetchAppointments();
+        }
+    }, [profile?.company_id]);
 
     const getStatusColor = (status: string) => {
         switch (status) {

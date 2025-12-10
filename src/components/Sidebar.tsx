@@ -70,12 +70,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
             <div
                 style={{ backgroundColor: theme === 'dark' ? '#000000' : '#ffffff' }}
-                className={`fixed left-0 top-0 h-screen w-64 border-r border-slate-200 dark:border-slate-800 p-6 flex flex-col z-50 transition-transform duration-300 shadow-2xl md:shadow-none ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+                className={`fixed left-0 top-0 h-screen w-64 border-r border-slate-200 dark:border-slate-800 p-6 flex flex-col z-50 transition-transform duration-300 shadow-none ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
                     }`}>
                 <div className="mb-8 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center">
-                            <span className="text-white font-bold text-lg">F</span>
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center shadow-none">
+                            <span className="text-white font-bold text-lg drop-shadow-none">F</span>
                         </div>
                         <div>
                             <h1 className={`font-bold text-lg ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>FluxTime</h1>

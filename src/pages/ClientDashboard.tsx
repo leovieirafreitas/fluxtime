@@ -26,10 +26,11 @@ export default function ClientDashboard() {
     const navigate = useNavigate();
     const [clientName, setClientName] = useState('Cliente');
     const [appointments, setAppointments] = useState<any[]>([]);
+    const [myCompanies, setMyCompanies] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const fetchAppointments = async () => {
+        const fetchDashboardData = async () => {
             const session = localStorage.getItem('client_session');
             if (!session) {
                 navigate('/client');
@@ -38,51 +39,88 @@ export default function ClientDashboard() {
             const parsed = JSON.parse(session);
             setClientName(parsed.name || 'Cliente');
 
+            let cleanPhone = null;
+            if (parsed.phone) {
+                let phoneToClean = parsed.phone.replace(/^\+55/, '').replace(/^55/, '');
+                cleanPhone = phoneToClean.replace(/\D/g, '');
+            }
+
+            // 1. Try to load from cache immediately for "instant" feel
+            const cacheKey = `dashboard_cache_${cleanPhone}`;
+            const cachedData = localStorage.getItem(cacheKey);
+
+            if (cachedData) {
+                try {
+                    const { appointments: cachedApts, companies: cachedComps } = JSON.parse(cachedData);
+                    if (cachedApts) setAppointments(cachedApts);
+                    if (cachedComps) setMyCompanies(cachedComps);
+                    // If we have cache, stop loading immediately
+                    if (cachedApts || cachedComps) setIsLoading(false);
+                } catch (e) {
+                    console.error("Error parsing cache", e);
+                }
+            }
 
             try {
-                // Try to find appointments by phone (most robust currently) or email
-                let query = supabase
-                    .from('appointments')
-                    .select(`
-                        *,
-                        company:companies(name),
-                        service:services(name, price)
-                    `)
-                    .order('start_time', { ascending: true });
+                // 2. Fetch fresh data in background
+                const { data: aptData, error: aptError } = await supabase.rpc('get_client_appointments', {
+                    p_phone: cleanPhone,
+                    p_email: parsed.email
+                });
 
-                if (parsed.phone) {
-                    // Normalize phone - remove all non-digits
-                    const cleanPhone = parsed.phone.replace(/\D/g, '');
+                if (aptError) throw aptError;
 
-                    // Create all possible phone formats to search
-                    const phoneVariations = [
-                        cleanPhone,                           // 11999999999
-                        `+55${cleanPhone}`,                   // +5511999999999
-                        `55${cleanPhone}`,                    // 5511999999999
-                        `(${cleanPhone.slice(0, 2)}) ${cleanPhone.slice(2, 7)}-${cleanPhone.slice(7)}`, // (11) 99999-9999
-                        `(${cleanPhone.slice(0, 2)}) ${cleanPhone.slice(2)}`, // (11) 999999999
-                    ];
+                const { data: companiesData, error: compError } = await supabase.rpc('get_client_companies', {
+                    p_phone: cleanPhone
+                });
 
-                    // Build OR query for all variations
-                    const orConditions = phoneVariations.map(v => `client_phone.eq.${v}`).join(',');
-                    query = query.or(orConditions);
-                } else if (parsed.email) {
-                    query = query.eq('client_email', parsed.email);
+                if (compError) console.error("Error fetching companies:", compError);
+
+                // Fetch latest client info to ensure name is correct (for Avatar/Initials)
+                const { data: clientInfoData, error: clientInfoError } = await supabase
+                    .rpc('public_get_global_client_info', { p_phone: cleanPhone });
+
+                if (clientInfoError) {
+                    console.error("Error fetching client info:", clientInfoError);
                 }
 
-                const { data, error } = await query;
+                // RPC returns an array, take the first item
+                const freshClientInfo = (clientInfoData && Array.isArray(clientInfoData) && clientInfoData.length > 0) ? clientInfoData[0] : null;
 
-                if (error) throw error;
-                setAppointments(data || []);
+                if (freshClientInfo && freshClientInfo.name) {
+                    setClientName(freshClientInfo.name);
+                    // Update session in localStorage to keep it fresh
+                    const updatedSession = { ...parsed, name: freshClientInfo.name, email: freshClientInfo.email };
+                    localStorage.setItem('client_session', JSON.stringify(updatedSession));
+                }
+
+                const mappedApts = (aptData || []).map((item: any) => ({
+                    id: item.id,
+                    status: item.status,
+                    start_time: item.start_time,
+                    company: { name: item.company_name },
+                    service: { name: item.service_name, price: item.service_price }
+                }));
+
+                // 3. Update state and cache
+                setAppointments(mappedApts);
+                setMyCompanies(companiesData || []);
+
+                localStorage.setItem(cacheKey, JSON.stringify({
+                    appointments: mappedApts,
+                    companies: companiesData || [],
+                    clientInfo: freshClientInfo, // Cache client info too
+                    timestamp: Date.now()
+                }));
 
             } catch (error) {
-                console.error('Error fetching appointments:', error);
+                console.error('Error fetching dashboard data:', error);
             } finally {
                 setIsLoading(false);
             }
         };
 
-        fetchAppointments();
+        fetchDashboardData();
     }, [navigate]);
 
     const handleLogout = () => {
@@ -150,28 +188,47 @@ export default function ClientDashboard() {
                             />
                             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                         </div>
-                        <p className="text-xs text-slate-500 px-1">Clique na foto de um negócio para filtrar</p>
+                        <p className="text-xs text-slate-500 px-1">Clique na foto de um negócio para filtrar ou acessar</p>
 
-                        <div
-                            onClick={() => navigate('/laribrows')}
-                            className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 hover:border-slate-300 transition-colors cursor-pointer group"
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded bg-green-100 flex items-center justify-center text-green-700 text-xs font-bold">
-                                    LB
+                        {myCompanies.length > 0 ? (
+                            myCompanies.map((comp) => (
+                                <div
+                                    key={comp.slug}
+                                    onClick={() => navigate(`/${comp.slug}`)}
+                                    className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 hover:border-slate-300 transition-colors cursor-pointer group"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        {comp.logo_url ? (
+                                            <img
+                                                src={comp.logo_url}
+                                                alt={comp.name}
+                                                className="w-8 h-8 rounded object-cover"
+                                            />
+                                        ) : (
+                                            <div className="w-8 h-8 rounded bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold">
+                                                {comp.name.substring(0, 2).toUpperCase()}
+                                            </div>
+                                        )}
+                                        <div className="overflow-hidden">
+                                            <h4 className="text-sm font-medium text-slate-900 truncate">{comp.name}</h4>
+                                            <p className="text-xs text-slate-500">
+                                                membro desde {new Date(comp.member_since).getFullYear()}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); navigate(`/${comp.slug}`); }}
+                                        className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded flex items-center gap-1 group-hover:bg-blue-100 transition-colors"
+                                    >
+                                        Acessar <ExternalLink className="w-3 h-3" />
+                                    </button>
                                 </div>
-                                <div className="overflow-hidden">
-                                    <h4 className="text-sm font-medium text-slate-900 truncate">Lari Brows</h4>
-                                    <p className="text-xs text-slate-500">há 1 ano</p>
-                                </div>
+                            ))
+                        ) : (
+                            <div className="text-center py-4 text-slate-400 text-sm">
+                                Nenhuma empresa encontrada.
                             </div>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); navigate('/laribrows'); }}
-                                className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded flex items-center gap-1 group-hover:bg-blue-100 transition-colors"
-                            >
-                                Acessar <ExternalLink className="w-3 h-3" />
-                            </button>
-                        </div>
+                        )}
                     </div>
                 </aside>
 

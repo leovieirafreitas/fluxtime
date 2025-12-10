@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
+import { dashboardCache } from '../lib/dashboardCache';
 
 export interface UserProfile {
     id: string;
@@ -64,6 +65,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         }
     };
 
+
     useEffect(() => {
         fetchProfile();
 
@@ -75,11 +77,19 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
                 const newUserId = session?.user?.id;
 
                 if (!currentUserId || (newUserId && newUserId !== currentUserId)) {
+                    // Clear dashboard cache to ensure fresh data for new session
+                    dashboardCache.insights = null;
+                    dashboardCache.appointments = null;
+
                     setLoading(true);
                     hasFetched.current = false; // Reset flag para forçar novo fetch
                     fetchProfile(true);
                 }
             } else if (event === 'SIGNED_OUT') {
+                // Clear dashboard cache on logout
+                dashboardCache.insights = null;
+                dashboardCache.appointments = null;
+
                 setProfile(null);
                 profileRef.current = null;
                 setLoading(false);

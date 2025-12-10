@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useUserProfile } from '../hooks/useUserProfile';
+import { dashboardCache, type DashboardInsights } from '../lib/dashboardCache';
 
 interface InsightCard {
     title: string;
@@ -9,7 +11,10 @@ interface InsightCard {
 }
 
 export default function Insights() {
-    const [stats, setStats] = useState({
+    const { profile } = useUserProfile();
+
+    // Initialize state from cache if available
+    const [stats, setStats] = useState<DashboardInsights>(dashboardCache.insights || {
         appointments: 0,
         activeClients: 0,
         revenue: 0
@@ -17,49 +22,41 @@ export default function Insights() {
 
     useEffect(() => {
         const fetchStats = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            if (!profile?.company_id) return;
 
-            const { data: companyData } = await supabase
-                .from('companies')
-                .select('id')
-                .eq('owner_id', user.id)
-                .single();
+            // If we already have cached data, don't fetch again
+            if (dashboardCache.insights) {
+                setStats(dashboardCache.insights);
+                return;
+            }
 
-            if (companyData) {
-                // 1. Appointments Count
-                const { count: apptCount } = await supabase
-                    .from('appointments')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('company_id', companyData.id);
+            try {
+                const { data, error } = await supabase
+                    .rpc('get_dashboard_insights', { p_company_id: profile.company_id });
 
-                // 2. Active Clients (Unique clients who have booked)
-                const { data: clientsData } = await supabase
-                    .from('appointments')
-                    .select('client_id')
-                    .eq('company_id', companyData.id);
+                if (error) throw error;
 
-                const uniqueClients = new Set(clientsData?.map(c => c.client_id).filter(Boolean)).size;
+                if (data && data.length > 0) {
+                    const statsData = data[0];
+                    const newStats = {
+                        appointments: statsData.total_appointments || 0,
+                        activeClients: statsData.active_clients || 0,
+                        revenue: statsData.total_revenue || 0
+                    };
 
-                // 3. Revenue (Sum of confirm appointments)
-                const { data: revenueData } = await supabase
-                    .from('appointments')
-                    .select('service:services(price)')
-                    .eq('company_id', companyData.id)
-                    .eq('status', 'confirmed');
-
-                const totalRevenue = revenueData?.reduce((acc, curr: any) => acc + (curr.service?.price || 0), 0) || 0;
-
-                setStats({
-                    appointments: apptCount || 0,
-                    activeClients: uniqueClients,
-                    revenue: totalRevenue
-                });
+                    // Save to cache
+                    dashboardCache.insights = newStats;
+                    setStats(newStats);
+                }
+            } catch (error) {
+                console.error('Error fetching dashboard insights:', error);
             }
         };
 
-        fetchStats();
-    }, []);
+        if (profile?.company_id) {
+            fetchStats();
+        }
+    }, [profile?.company_id]);
 
     const insights: InsightCard[] = [
         { title: 'Agendamentos', value: stats.appointments, color: 'from-purple-500/20 to-purple-600/20' },

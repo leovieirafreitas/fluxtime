@@ -49,7 +49,7 @@ export default function SiteCustomization() {
                 .from('companies')
                 .select('*')
                 .eq('id', profile.company_id)
-                .single();
+                .maybeSingle();
 
             if (error) throw error;
 
@@ -184,7 +184,7 @@ export default function SiteCustomization() {
                                 <div className={`flex items-center gap-2 p-3 rounded-lg border ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-blue-50 border-blue-200'
                                     }`}>
                                     <span className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-blue-600'}`}>
-                                        https://app.fluxtime.com/
+                                        https://app.fluxtime.com.br/
                                     </span>
                                     <input
                                         type="text"
@@ -282,18 +282,18 @@ export default function SiteCustomization() {
                                 )}
                             </div>
 
-                            {/* Remover Marca da Quaddro */}
+                            {/* Remover Marca da FluxTime */}
                             <div>
                                 <div className="flex items-center gap-2 mb-2">
                                     <label className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-                                        Remover marca da Quaddro?
+                                        Remover marca da FluxTime?
                                     </label>
                                     <span className="text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">
                                         Essencial
                                     </span>
                                 </div>
                                 <p className={`text-sm mb-3 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                                    Desative caso queira manter a marca "Feito com a Quaddro" no seu site.
+                                    Desative caso queira manter a marca "Feito com a FluxTime" no seu site.
                                 </p>
                                 <div className={`p-4 rounded-lg border ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
                                     }`}>
@@ -308,7 +308,7 @@ export default function SiteCustomization() {
                                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                                         </svg>
-                                        <span className="font-medium">Feito com Quaddro</span>
+                                        <span className="font-medium">Feito com FluxTime</span>
                                     </div>
                                 </div>
                                 <label className="flex items-center gap-3 mt-3 cursor-pointer">
@@ -319,7 +319,7 @@ export default function SiteCustomization() {
                                         className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                                     />
                                     <span className={`text-sm ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>
-                                        Remover marca da Quaddro
+                                        Remover marca da FluxTime
                                     </span>
                                 </label>
                             </div>
