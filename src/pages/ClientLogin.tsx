@@ -91,7 +91,7 @@ export default function ClientLogin() {
             // Check using Secure RPC
             const { data, error } = await supabase
                 .rpc('public_check_client_phone', { p_phone: cleanPhone })
-                .maybeSingle();
+                .maybeSingle<any>();
 
             if (data && !error) {
                 // Login directly
