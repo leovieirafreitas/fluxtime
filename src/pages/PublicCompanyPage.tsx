@@ -77,6 +77,8 @@ export default function PublicCompanyPage() {
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [businessHours, setBusinessHours] = useState<BusinessHour[]>([]);
     const [loading, setLoading] = useState(true);
+    const [schedulingWindowDays, setSchedulingWindowDays] = useState<number>(90); // Default 90 days
+    const [slotIntervalMinutes, setSlotIntervalMinutes] = useState<number>(30); // Default 30 min
 
     // Booking Flow State
     const [bookingStep, setBookingStep] = useState<BookingStep>(BookingStep.SELECT_SERVICE);
@@ -87,18 +89,39 @@ export default function PublicCompanyPage() {
     const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
     const [busySlots, setBusySlots] = useState<{ start: number, end: number }[]>([]);
 
+    // Initialize client state synchronously from localStorage to prevent flash
+    const getInitialClientState = () => {
+        try {
+            const clientSession = localStorage.getItem('client_session');
+            if (clientSession) {
+                const parsed = JSON.parse(clientSession);
+                return {
+                    isLoggedIn: !!parsed.phone,
+                    name: parsed.name || '',
+                    phone: parsed.phone || '',
+                    email: parsed.email || ''
+                };
+            }
+        } catch (e) {
+            console.error('Error parsing client session:', e);
+        }
+        return { isLoggedIn: false, name: '', phone: '', email: '' };
+    };
+
+    const initialClientState = getInitialClientState();
+
     // Client Data
-    const [clientPhone, setClientPhone] = useState('');
+    const [clientPhone, setClientPhone] = useState(initialClientState.phone);
     const [verificationCode, setVerificationCode] = useState('');
     const [generatedOtp, setGeneratedOtp] = useState<string | null>(null);
-    const [clientName, setClientName] = useState('');
-    const [clientEmail, setClientEmail] = useState('');
+    const [clientName, setClientName] = useState(initialClientState.name);
+    const [clientEmail, setClientEmail] = useState(initialClientState.email);
     const [clientObs, setClientObs] = useState('');
     const [isNewClient, setIsNewClient] = useState(false);
 
     const [isBookingMode, setIsBookingMode] = useState(false);
 
-    const [isClientLoggedIn, setIsClientLoggedIn] = useState(false);
+    const [isClientLoggedIn, setIsClientLoggedIn] = useState(initialClientState.isLoggedIn);
     const [showRegistrationFields, setShowRegistrationFields] = useState(false);
 
     const [clientId, setClientId] = useState<string | null>(null);
@@ -192,6 +215,24 @@ export default function PublicCompanyPage() {
             setServices(response.services_data || []);
             setCategories(response.categories_data || []);
             setBusinessHours(response.business_hours_data || []);
+
+            // Fetch scheduling rules
+            if (response.company_data?.id) {
+                const { data: rulesData } = await supabase
+                    .from('company_scheduling_rules')
+                    .select('scheduling_window_days, slot_interval_minutes')
+                    .eq('company_id', response.company_data.id)
+                    .single();
+
+                if (rulesData) {
+                    if (rulesData.scheduling_window_days) {
+                        setSchedulingWindowDays(rulesData.scheduling_window_days);
+                    }
+                    if (rulesData.slot_interval_minutes) {
+                        setSlotIntervalMinutes(rulesData.slot_interval_minutes);
+                    }
+                }
+            }
 
         } catch (error) {
             console.error('Error fetching company data:', error);
@@ -527,8 +568,9 @@ export default function PublicCompanyPage() {
         }
 
         const slots: string[] = [];
-        // Use explicitly configured interval, or default to service duration (so slots are disjoint)
-        const interval = explicitInterval || serviceDuration || 30;
+        // Use explicitly configured interval (from service or company rules), never use service duration as interval
+        // The explicitInterval parameter now always has a value (service or company), so 30 is just a safety fallback
+        const interval = explicitInterval || 30;
 
         // Check if date is today
         const now = new Date();
@@ -579,7 +621,7 @@ export default function PublicCompanyPage() {
         return slots.sort();
     };
 
-    const timeSlots = selectedService ? generateTimeSlots(selectedDate, selectedService.duration_minutes || selectedService.duration || 30, selectedService.slot_interval_minutes) : [];
+    const timeSlots = selectedService ? generateTimeSlots(selectedDate, selectedService.duration_minutes || selectedService.duration || 30, selectedService.slot_interval_minutes || slotIntervalMinutes) : [];
 
     const filteredServices = selectedCategory === 'all'
         ? services
@@ -619,29 +661,6 @@ export default function PublicCompanyPage() {
                                 <a href="#services" className="text-slate-700 hover:text-slate-900 font-medium">Serviços</a>
                                 <a href="#about" className="text-slate-700 hover:text-slate-900 font-medium">Sobre</a>
                             </nav>
-                            {isClientLoggedIn && (
-                                <a href="/client/dashboard" className="text-sm font-medium text-slate-700 hover:text-blue-600 flex items-center gap-2">
-                                    {(() => {
-                                        let displayName = clientName;
-                                        if (!displayName) {
-                                            try {
-                                                const session = JSON.parse(localStorage.getItem('client_session') || '{}');
-                                                if (session.name) displayName = session.name;
-                                            } catch (e) { /* ignore */ }
-                                        }
-                                        displayName = displayName || 'Cliente';
-
-                                        return (
-                                            <img
-                                                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random&color=fff&bold=true`}
-                                                alt={displayName}
-                                                className="w-8 h-8 rounded-full"
-                                            />
-                                        );
-                                    })()}
-                                    <span className="hidden sm:inline">Meu Perfil</span>
-                                </a>
-                            )}
                         </div>
                     ) : (
                         <div className="hidden md:flex items-center gap-6">
@@ -935,6 +954,11 @@ export default function PublicCompanyPage() {
                                                             }}
                                                             accentColor={accentColor}
                                                             minDate={new Date()}
+                                                            maxDate={(() => {
+                                                                const max = new Date();
+                                                                max.setDate(max.getDate() + schedulingWindowDays);
+                                                                return max;
+                                                            })()}
                                                         />
                                                     </div>
                                                 </div>
@@ -1261,7 +1285,27 @@ export default function PublicCompanyPage() {
                                         Agendar agora
                                     </button>
 
-                                    {!isClientLoggedIn && (
+                                    {isClientLoggedIn ? (
+                                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <img
+                                                    src={`https://ui-avatars.com/api/?name=${encodeURIComponent(clientName || 'Cliente')}&background=random&color=fff&bold=true`}
+                                                    alt={clientName || 'Cliente'}
+                                                    className="w-12 h-12 rounded-full"
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-semibold text-slate-900 truncate">{clientName || 'Cliente'}</p>
+                                                    <p className="text-xs text-slate-500 truncate">{clientPhone}</p>
+                                                </div>
+                                            </div>
+                                            <a
+                                                href="/client/dashboard"
+                                                className="block w-full text-center py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                                            >
+                                                Ver meu perfil
+                                            </a>
+                                        </div>
+                                    ) : (
                                         <div className="text-center pt-2">
                                             <a href="/client" className="text-sm font-medium hover:underline text-slate-500">
                                                 Já é cliente? <span className="text-blue-600">Entrar</span>
@@ -1356,7 +1400,8 @@ export default function PublicCompanyPage() {
 
                             {!company.remove_branding && (
                                 <div className="flex items-center justify-center gap-2 text-sm text-slate-500 pt-4 border-t border-slate-100 mt-4">
-                                    Powered by FluxTime
+                                    <img src="/img/MarcaSite.png" alt="FluxTime" className="h-10 w-auto object-contain" />
+                                    <span>Feito com a FluxTime</span>
                                 </div>
                             )}
                         </div>

@@ -74,9 +74,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                     }`}>
                 <div className="mb-8 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center shadow-none">
-                            <span className="text-white font-bold text-lg drop-shadow-none">F</span>
-                        </div>
+                        <img src="/img/Fluxtime.png" alt="FluxTime" className="w-10 h-10 object-cover" />
                         <div>
                             <h1 className={`font-bold text-lg ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>FluxTime</h1>
                             {loading ? (

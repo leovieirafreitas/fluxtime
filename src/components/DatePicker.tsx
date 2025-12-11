@@ -6,9 +6,10 @@ interface DatePickerProps {
     onDateChange: (date: Date) => void;
     accentColor?: string;
     minDate?: Date;
+    maxDate?: Date;
 }
 
-export default function DatePicker({ selectedDate, onDateChange, accentColor = '#6366f1', minDate }: DatePickerProps) {
+export default function DatePicker({ selectedDate, onDateChange, accentColor = '#6366f1', minDate, maxDate }: DatePickerProps) {
     const [currentMonth, setCurrentMonth] = useState(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
 
     const monthNames = [
@@ -82,12 +83,28 @@ export default function DatePicker({ selectedDate, onDateChange, accentColor = '
         return date < minDate;
     };
 
+    const isFutureDate = (day: number | null) => {
+        if (!day || !maxDate) return false;
+        const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+        // Set time to end of day for maxDate comparison
+        const maxDateEndOfDay = new Date(maxDate);
+        maxDateEndOfDay.setHours(23, 59, 59, 999);
+        return date > maxDateEndOfDay;
+    };
+
     const handleDayClick = (day: number | null) => {
         if (!day) return;
         const newDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
 
         // Check if date is in the past
         if (minDate && newDate < minDate) return;
+
+        // Check if date is beyond max date
+        if (maxDate) {
+            const maxDateEndOfDay = new Date(maxDate);
+            maxDateEndOfDay.setHours(23, 59, 59, 999);
+            if (newDate > maxDateEndOfDay) return;
+        }
 
         onDateChange(newDate);
     };
@@ -138,11 +155,11 @@ export default function DatePicker({ selectedDate, onDateChange, accentColor = '
                         <button
                             key={index}
                             onClick={() => handleDayClick(day)}
-                            disabled={!day || past}
+                            disabled={!day || past || isFutureDate(day)}
                             className={`
                                 aspect-square flex items-center justify-center rounded-lg text-sm font-medium transition-all
                                 ${!day ? 'invisible' : ''}
-                                ${past ? 'text-slate-300 cursor-not-allowed' : ''}
+                                ${past || isFutureDate(day) ? 'text-slate-300 cursor-not-allowed' : ''}
                                 ${selected
                                     ? 'text-white shadow-lg scale-105'
                                     : today
