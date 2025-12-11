@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Moon, Sun, Loader2, User, Phone, Calendar, Mail, Lock, Building2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
+import { validatePasswordStrength, sanitizeInput } from '../lib/securityConfig';
 
 export default function Login() {
     const [showPassword, setShowPassword] = useState(false);
@@ -35,6 +36,13 @@ export default function Login() {
                 if (password !== confirmPassword) {
                     throw new Error('As senhas não coincidem');
                 }
+
+                // Validar força da senha
+                const passwordValidation = validatePasswordStrength(password);
+                if (!passwordValidation.isValid) {
+                    throw new Error(passwordValidation.errors.join('\n'));
+                }
+
                 if (password.length < 6) {
                     throw new Error('A senha deve ter pelo menos 6 caracteres');
                 }
@@ -42,14 +50,20 @@ export default function Login() {
                     throw new Error('O nome da empresa é obrigatório');
                 }
 
+                // Sanitizar inputs
+                const sanitizedEmail = sanitizeInput(email.trim());
+                const sanitizedCompanyName = sanitizeInput(companyName);
+                const sanitizedFullName = sanitizeInput(fullName);
+                const sanitizedPhone = sanitizeInput(phone);
+
                 const { error } = await supabase.auth.signUp({
-                    email: email.trim(),
+                    email: sanitizedEmail,
                     password,
                     options: {
                         data: {
-                            company_name: companyName,
-                            full_name: fullName,
-                            phone: phone,
+                            company_name: sanitizedCompanyName,
+                            full_name: sanitizedFullName,
+                            phone: sanitizedPhone,
                             birth_date: birthDate,
                         },
                     },
@@ -58,8 +72,11 @@ export default function Login() {
                 if (error) throw error;
                 setMessage('Cadastro realizado com sucesso! Verifique seu e-mail para confirmar.');
             } else {
+                // Sanitizar email no login
+                const sanitizedEmail = sanitizeInput(email.trim());
+
                 const { data, error } = await supabase.auth.signInWithPassword({
-                    email,
+                    email: sanitizedEmail,
                     password,
                 });
 
@@ -69,7 +86,11 @@ export default function Login() {
                 }
             }
         } catch (err: any) {
-            setError(err.message || 'Ocorreu um erro. Tente novamente.');
+            // Não expor detalhes técnicos do erro em produção
+            const errorMessage = import.meta.env.DEV
+                ? err.message
+                : 'Ocorreu um erro. Verifique suas credenciais e tente novamente.';
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }
