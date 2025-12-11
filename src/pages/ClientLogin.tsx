@@ -126,7 +126,7 @@ export default function ClientLogin() {
         const normalizedPhone = cleanPhone.startsWith('55') ? `+${cleanPhone}` : `+55${cleanPhone}`;
 
         try {
-            const { data, error } = await supabase.rpc('public_register_portal_client', {
+            const { error } = await supabase.rpc('public_register_portal_client', {
                 p_name: name,
                 p_phone: normalizedPhone,
                 p_email: email,

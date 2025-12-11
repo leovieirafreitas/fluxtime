@@ -537,7 +537,7 @@ export default function Appointments() {
                                         </div>
 
                                         {/* Columns for Days */}
-                                        {weekDays.map((day, index) => {
+                                        {weekDays.map((day) => {
                                             const isOpen = isBusinessOpen(day.fullDate, hour);
                                             const isAllowed = isDateAllowed(day.fullDate);
 
