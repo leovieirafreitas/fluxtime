@@ -230,18 +230,19 @@ export default function PublicCompanyPage() {
 
             // Fetch scheduling rules
             if (response.company_data?.id) {
-                const { data: rulesData } = await supabase
-                    .from('company_scheduling_rules')
-                    .select('scheduling_window_days, slot_interval_minutes')
-                    .eq('company_id', response.company_data.id)
-                    .maybeSingle();
+                // Fetch scheduling rules via RPC
+                if (response.company_data?.id) {
+                    const { data: rulesData, error: rulesError } = await supabase
+                        .rpc('get_public_scheduling_rules', { p_company_id: response.company_data.id })
+                        .maybeSingle<any>();
 
-                if (rulesData) {
-                    if (rulesData.scheduling_window_days) {
-                        setSchedulingWindowDays(rulesData.scheduling_window_days);
-                    }
-                    if (rulesData.slot_interval_minutes) {
-                        setSlotIntervalMinutes(rulesData.slot_interval_minutes);
+                    if (rulesData && !rulesError) {
+                        if (rulesData.scheduling_window_days) {
+                            setSchedulingWindowDays(rulesData.scheduling_window_days);
+                        }
+                        if (rulesData.slot_interval_minutes) {
+                            setSlotIntervalMinutes(rulesData.slot_interval_minutes);
+                        }
                     }
                 }
             }
