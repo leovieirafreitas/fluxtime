@@ -88,14 +88,9 @@ export default function ClientLogin() {
         const normalizedPhone = cleanPhone.startsWith('55') ? `+${cleanPhone}` : `+55${cleanPhone}`;
 
         try {
-            // Check if client exists in DB
-            const potentialPhones = [cleanPhone, `+55${cleanPhone}`, `55${cleanPhone}`];
-
+            // Check using Secure RPC
             const { data, error } = await supabase
-                .from('clients')
-                .select('*')
-                .in('phone', potentialPhones)
-                .limit(1)
+                .rpc('public_check_client_phone', { p_phone: cleanPhone })
                 .maybeSingle();
 
             if (data && !error) {
