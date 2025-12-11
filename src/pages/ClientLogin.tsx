@@ -95,6 +95,7 @@ export default function ClientLogin() {
                 .from('clients')
                 .select('*')
                 .in('phone', potentialPhones)
+                .limit(1)
                 .maybeSingle();
 
             if (data && !error) {
