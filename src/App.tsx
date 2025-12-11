@@ -10,6 +10,7 @@ import TimezoneSettings from './pages/TimezoneSettings';
 import BusinessHoursSettings from './pages/BusinessHoursSettings';
 import SchedulingRules from './pages/SchedulingRules';
 import Team from './pages/Team';
+import Appointments from './pages/Appointments';
 import PaymentSettings from './pages/PaymentSettings';
 import SiteCustomization from './pages/SiteCustomization';
 import PublicCompanyPage from './pages/PublicCompanyPage';
@@ -90,6 +91,10 @@ function App() {
           <Route
             path="/settings/team"
             element={session ? <Team /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/appointments"
+            element={session ? <Appointments /> : <Navigate to="/login" />}
           />
           <Route
             path="/settings/payments"

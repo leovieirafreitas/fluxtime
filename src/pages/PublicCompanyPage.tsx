@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { whatsappService } from '../services/whatsapp';
 import { MapPin, Clock, Star } from 'lucide-react';
 import DatePicker from '../components/DatePicker';
+import OTPInput from '../components/OTPInput';
 
 interface Company {
     id: string;
@@ -126,6 +127,17 @@ export default function PublicCompanyPage() {
 
     const [clientId, setClientId] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [timeLeft, setTimeLeft] = useState(0);
+
+    useEffect(() => {
+        if (timeLeft > 0) {
+            const timerId = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+            return () => clearTimeout(timerId);
+        } else {
+            // Expire code when timer hits 0
+            setGeneratedOtp(null);
+        }
+    }, [timeLeft]);
 
     const DAYS = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
@@ -222,7 +234,7 @@ export default function PublicCompanyPage() {
                     .from('company_scheduling_rules')
                     .select('scheduling_window_days, slot_interval_minutes')
                     .eq('company_id', response.company_data.id)
-                    .single();
+                    .maybeSingle();
 
                 if (rulesData) {
                     if (rulesData.scheduling_window_days) {
@@ -432,6 +444,7 @@ export default function PublicCompanyPage() {
         try {
             await whatsappService.sendText(clientPhone, `Seu código de verificação FluxTime é: ${code}`);
             setBookingStep(BookingStep.CLIENT_VERIFICATION);
+            setTimeLeft(30);
         } catch (error) {
             alert("Erro ao enviar código. Tente novamente ou verifique o número.");
         } finally {
@@ -1192,36 +1205,56 @@ export default function PublicCompanyPage() {
                                 {/* Step 5: Verification Modal */}
                                 {bookingStep === BookingStep.CLIENT_VERIFICATION && (
                                     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-                                        <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl animate-fade-in relative">
+                                        <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl animate-fade-in relative text-center">
                                             <button
                                                 onClick={() => setBookingStep(BookingStep.CLIENT_PHONE)}
                                                 className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
                                             >
                                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                                             </button>
-                                            <h3 className="text-2xl font-bold text-slate-900 mb-2">Insira o código</h3>
-                                            <p className="text-slate-600 mb-6">Enviamos um código via WhatsApp para você entrar na sua conta.</p>
 
-                                            <input
-                                                type="text"
-                                                placeholder="Digite o código enviado no WhatsApp"
-                                                className="w-full px-4 py-3 border border-slate-300 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 mb-6 text-lg outline-none focus:ring-2 focus:ring-blue-500"
-                                                value={verificationCode}
-                                                onChange={(e) => setVerificationCode(e.target.value)}
-                                            />
+                                            <h3 className="text-2xl font-bold text-slate-900 mb-2">Digite o Código</h3>
+                                            <p className="text-slate-500 text-sm mb-6">
+                                                Enviamos um código de verificação para<br />
+                                                <span className="font-semibold text-slate-700">{clientPhone}</span>
+                                            </p>
+
+                                            <div className="mb-8">
+                                                <OTPInput
+                                                    value={verificationCode}
+                                                    onChange={setVerificationCode}
+                                                    onComplete={() => { }}
+                                                />
+                                            </div>
 
                                             <button
                                                 style={{ backgroundColor: accentColor }}
-                                                className="w-full py-3 text-white rounded-xl font-bold hover:opacity-90 mb-4 disabled:opacity-50"
+                                                className="w-full h-12 text-white rounded-xl font-bold hover:opacity-90 mb-4 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
                                                 onClick={handleVerifyAndBook}
-                                                disabled={isSubmitting}
+                                                disabled={isSubmitting || verificationCode.length < 6}
                                             >
-                                                {isSubmitting ? 'Confirmando...' : 'Confirmar e Agendar'}
+                                                {isSubmitting ? (
+                                                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                ) : (
+                                                    'Confirmar e Agendar'
+                                                )}
                                             </button>
 
-                                            <p className="text-center text-slate-500 text-sm">
-                                                Reenviar código via WhatsApp em 28 segundos.
-                                            </p>
+                                            <div className="text-center">
+                                                {timeLeft > 0 ? (
+                                                    <p className="text-sm text-slate-500">
+                                                        Reenviar código em <span className="font-medium text-slate-900">00:{timeLeft.toString().padStart(2, '0')}</span>
+                                                    </p>
+                                                ) : (
+                                                    <button
+                                                        onClick={handleSendCode}
+                                                        className="text-sm text-blue-600 font-medium hover:underline"
+                                                        disabled={loading}
+                                                    >
+                                                        Enviar código novamente
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 )}
