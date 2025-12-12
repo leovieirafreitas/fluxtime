@@ -4,7 +4,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useUserProfileContext } from '../contexts/UserProfileContext';
 import { supabase } from '../lib/supabase';
 import Sidebar from '../components/Sidebar';
-import { Menu, Upload } from 'lucide-react';
+import { Menu, Upload, ChevronDown } from 'lucide-react';
 
 interface Collaborator {
     id: string;
@@ -70,6 +70,10 @@ export default function NewService() {
     const [bufferPost, setBufferPost] = useState<string>('');
     const [isBufferPostEnabled, setIsBufferPostEnabled] = useState(false);
 
+    // Custom Dropdown States
+    const [isLocationTypeOpen, setIsLocationTypeOpen] = useState(false);
+    const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+
 
     useEffect(() => {
         if (profile?.company_id) {
@@ -83,6 +87,22 @@ export default function NewService() {
             fetchServiceDetails();
         }
     }, [id, profile]);
+
+    // Close dropdowns when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (!target.closest('.relative')) {
+                setIsLocationTypeOpen(false);
+                setIsCategoryOpen(false);
+            }
+        };
+
+        if (isLocationTypeOpen || isCategoryOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [isLocationTypeOpen, isCategoryOpen]);
 
     const fetchCollaborators = async () => {
         try {
@@ -317,9 +337,9 @@ export default function NewService() {
                     </div>
 
                     {/* Card: Header Info */}
-                    <div className={`p-6 rounded-xl border ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                    <div className={`p-6 rounded-xl border ${theme === 'dark' ? 'bg-black border-slate-800' : 'bg-white border-slate-200'}`}>
                         <div className="mb-6">
-                            <button className={`w-full h-32 rounded-lg border-2 border-dashed flex items-center justify-center gap-2 transition-colors ${theme === 'dark' ? 'border-slate-700 hover:border-slate-600 bg-slate-800/50' : 'border-slate-300 hover:border-slate-400 bg-slate-50'
+                            <button className={`w-full h-32 rounded-lg border-2 border-dashed flex items-center justify-center gap-2 transition-colors ${theme === 'dark' ? 'border-slate-700 hover:border-slate-600 bg-black' : 'border-slate-300 hover:border-slate-400 bg-slate-50'
                                 }`}>
                                 <Upload className="w-5 h-5 text-slate-400" />
                                 <span className={theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}>Adicionar foto de capa</span>
@@ -347,7 +367,7 @@ export default function NewService() {
                     </div>
 
                     {/* Card: Informações Gerais */}
-                    <div className={`p-6 rounded-xl border ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                    <div className={`p-6 rounded-xl border ${theme === 'dark' ? 'bg-black border-slate-800' : 'bg-white border-slate-200'}`}>
                         <h2 className="text-lg font-bold mb-6">Informações gerais</h2>
                         <div className="space-y-6">
                             {/* Duração */}
@@ -358,7 +378,7 @@ export default function NewService() {
                                 <select
                                     value={duration}
                                     onChange={(e) => setDuration(e.target.value)}
-                                    className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+                                    className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-black border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
                                 >
                                     <option value="" disabled>Escolha uma duração</option>
                                     <option value="15">15 min</option>
@@ -375,15 +395,54 @@ export default function NewService() {
                                 <label className="flex items-center gap-2 text-sm font-medium">
                                     Tipo de local *
                                 </label>
-                                <select
-                                    value={locationType}
-                                    onChange={(e) => setLocationType(e.target.value)}
-                                    className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
-                                >
-                                    <option value="business_address">Em meu estabelecimento</option>
-                                    <option value="client_address">No endereço do cliente</option>
-                                    <option value="online">Online</option>
-                                </select>
+                                <div className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsLocationTypeOpen(!isLocationTypeOpen)}
+                                        className={`w-full px-4 py-2.5 rounded-lg border outline-none flex items-center justify-between transition-colors ${theme === 'dark' ? 'bg-black border-slate-700 text-white hover:border-slate-600' : 'bg-white border-slate-200 text-slate-900 hover:border-slate-300'}`}
+                                    >
+                                        <span>
+                                            {locationType === 'business_address' && 'Em meu estabelecimento'}
+                                            {locationType === 'client_address' && 'No endereço do cliente'}
+                                            {locationType === 'online' && 'Online'}
+                                        </span>
+                                        <ChevronDown className={`w-4 h-4 transition-transform ${isLocationTypeOpen ? 'rotate-180' : ''} ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`} />
+                                    </button>
+                                    {isLocationTypeOpen && (
+                                        <div className={`absolute z-50 w-full mt-2 rounded-lg border shadow-lg overflow-hidden ${theme === 'dark' ? 'bg-black border-slate-700' : 'bg-white border-slate-200'}`}>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setLocationType('business_address');
+                                                    setIsLocationTypeOpen(false);
+                                                }}
+                                                className={`w-full px-4 py-2.5 text-left transition-colors ${locationType === 'business_address' ? (theme === 'dark' ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-600') : (theme === 'dark' ? 'hover:bg-slate-900 text-white' : 'hover:bg-slate-50 text-slate-900')}`}
+                                            >
+                                                Em meu estabelecimento
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setLocationType('client_address');
+                                                    setIsLocationTypeOpen(false);
+                                                }}
+                                                className={`w-full px-4 py-2.5 text-left transition-colors ${locationType === 'client_address' ? (theme === 'dark' ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-600') : (theme === 'dark' ? 'hover:bg-slate-900 text-white' : 'hover:bg-slate-50 text-slate-900')}`}
+                                            >
+                                                No endereço do cliente
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setLocationType('online');
+                                                    setIsLocationTypeOpen(false);
+                                                }}
+                                                className={`w-full px-4 py-2.5 text-left transition-colors ${locationType === 'online' ? (theme === 'dark' ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-600') : (theme === 'dark' ? 'hover:bg-slate-900 text-white' : 'hover:bg-slate-50 text-slate-900')}`}
+                                            >
+                                                Online
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Colaboradores */}
@@ -394,7 +453,7 @@ export default function NewService() {
                                 <select
                                     value={selectedCollaborators[0] || ''}
                                     onChange={(e) => setSelectedCollaborators([e.target.value])}
-                                    className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+                                    className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-black border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
                                 >
                                     <option value="" disabled>Selecione um colaborador</option>
                                     {collaborators.map(collab => (
@@ -408,16 +467,45 @@ export default function NewService() {
                                 <label className="flex items-center gap-2 text-sm font-medium">
                                     Combo (Opcional)
                                 </label>
-                                <select
-                                    value={categoryId}
-                                    onChange={(e) => setCategoryId(e.target.value)}
-                                    className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
-                                >
-                                    <option value="">Nenhum combo selecionado</option>
-                                    {categories.map(cat => (
-                                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                    ))}
-                                </select>
+                                <div className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsCategoryOpen(!isCategoryOpen)}
+                                        className={`w-full px-4 py-2.5 rounded-lg border outline-none flex items-center justify-between transition-colors ${theme === 'dark' ? 'bg-black border-slate-700 text-white hover:border-slate-600' : 'bg-white border-slate-200 text-slate-900 hover:border-slate-300'}`}
+                                    >
+                                        <span className={!categoryId ? (theme === 'dark' ? 'text-slate-500' : 'text-slate-400') : ''}>
+                                            {categoryId ? categories.find(cat => cat.id === categoryId)?.name : 'Nenhum combo selecionado'}
+                                        </span>
+                                        <ChevronDown className={`w-4 h-4 transition-transform ${isCategoryOpen ? 'rotate-180' : ''} ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`} />
+                                    </button>
+                                    {isCategoryOpen && (
+                                        <div className={`absolute z-50 w-full mt-2 rounded-lg border shadow-lg overflow-hidden max-h-60 overflow-y-auto ${theme === 'dark' ? 'bg-black border-slate-700' : 'bg-white border-slate-200'}`}>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setCategoryId('');
+                                                    setIsCategoryOpen(false);
+                                                }}
+                                                className={`w-full px-4 py-2.5 text-left transition-colors ${!categoryId ? (theme === 'dark' ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-600') : (theme === 'dark' ? 'hover:bg-slate-900 text-white' : 'hover:bg-slate-50 text-slate-900')}`}
+                                            >
+                                                Nenhum combo selecionado
+                                            </button>
+                                            {categories.map(cat => (
+                                                <button
+                                                    key={cat.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setCategoryId(cat.id);
+                                                        setIsCategoryOpen(false);
+                                                    }}
+                                                    className={`w-full px-4 py-2.5 text-left transition-colors ${categoryId === cat.id ? (theme === 'dark' ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-600') : (theme === 'dark' ? 'hover:bg-slate-900 text-white' : 'hover:bg-slate-50 text-slate-900')}`}
+                                                >
+                                                    {cat.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
 
@@ -425,7 +513,7 @@ export default function NewService() {
                     </div>
 
                     {/* Card: Preço */}
-                    <div className={`p-6 rounded-xl border ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                    <div className={`p-6 rounded-xl border ${theme === 'dark' ? 'bg-black border-slate-800' : 'bg-white border-slate-200'}`}>
                         <h2 className="text-lg font-bold mb-6">Preço</h2>
                         <div className="space-y-6">
                             <div className="grid grid-cols-[180px_1fr] items-center gap-4">
@@ -438,7 +526,7 @@ export default function NewService() {
                                         type="text"
                                         value={price}
                                         onChange={(e) => setPrice(e.target.value)}
-                                        className={`w-full pl-10 pr-4 py-2.5 rounded-lg border outline-none transition-colors ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`}
+                                        className={`w-full pl-10 pr-4 py-2.5 rounded-lg border outline-none transition-colors ${theme === 'dark' ? 'bg-black border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`}
                                         placeholder="0,00"
                                     />
                                 </div>
@@ -467,7 +555,7 @@ export default function NewService() {
                                             type="text"
                                             value={reservationFee}
                                             onChange={(e) => setReservationFee(e.target.value)}
-                                            className={`w-full pl-10 pr-4 py-2.5 rounded-lg border outline-none transition-colors ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`}
+                                            className={`w-full pl-10 pr-4 py-2.5 rounded-lg border outline-none transition-colors ${theme === 'dark' ? 'bg-black border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`}
                                             placeholder="0,00"
                                         />
                                     </div>
@@ -477,7 +565,7 @@ export default function NewService() {
                     </div>
 
                     {/* Card: Avançado */}
-                    <div className={`p-6 rounded-xl border ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                    <div className={`p-6 rounded-xl border ${theme === 'dark' ? 'bg-black border-slate-800' : 'bg-white border-slate-200'}`}>
                         <h2 className="text-lg font-bold mb-6">Avançado</h2>
                         <div className="space-y-6">
                             <div className="grid grid-cols-[180px_1fr] items-center gap-4">
@@ -487,7 +575,7 @@ export default function NewService() {
                                 <select
                                     value={visibility}
                                     onChange={(e) => setVisibility(e.target.value)}
-                                    className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+                                    className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-black border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
                                 >
                                     <option value="public">Público - Visível no seu site para todos</option>
                                     <option value="private">Privado - Visível apenas para a equipe</option>
@@ -516,14 +604,14 @@ export default function NewService() {
                                     onChange={(e) => setGuidelines(e.target.value)}
                                     placeholder="Digite as orientações..."
                                     rows={3}
-                                    className={`w-full px-4 py-2.5 rounded-lg border outline-none ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`}
+                                    className={`w-full px-4 py-2.5 rounded-lg border outline-none ${theme === 'dark' ? 'bg-black border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`}
                                 />
                             )}
                         </div>
                     </div>
 
                     {/* Card: Regras para agendar */}
-                    <div className={`p-6 rounded-xl border ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                    <div className={`p-6 rounded-xl border ${theme === 'dark' ? 'bg-black border-slate-800' : 'bg-white border-slate-200'}`}>
                         <div className="flex items-center justify-between mb-2">
                             <h2 className="text-lg font-bold">Regras para agendar</h2>
                             <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">Ver regras gerais ↗</button>
@@ -554,7 +642,7 @@ export default function NewService() {
                                     <select
                                         value={slotInterval}
                                         onChange={(e) => setSlotInterval(e.target.value)}
-                                        className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+                                        className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-black border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
                                     >
                                         <option value="15">15 min</option>
                                         <option value="30">30 min</option>
@@ -584,7 +672,7 @@ export default function NewService() {
                                     <select
                                         value={schedulingWindow}
                                         onChange={(e) => setSchedulingWindow(e.target.value)}
-                                        className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+                                        className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-black border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
                                     >
                                         <option value="30">Até 30 dias corridos no futuro</option>
                                         <option value="60">Até 60 dias corridos no futuro</option>
@@ -614,7 +702,7 @@ export default function NewService() {
                                     <select
                                         value={minNotice}
                                         onChange={(e) => setMinNotice(e.target.value)}
-                                        className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+                                        className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-black border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
                                     >
                                         <option value="0">Não exigir antecedência</option>
                                         <option value="60">1 hora</option>
@@ -644,7 +732,7 @@ export default function NewService() {
                                     <select
                                         value={bufferPre}
                                         onChange={(e) => setBufferPre(e.target.value)}
-                                        className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+                                        className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-black border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
                                     >
                                         <option value="5">5 min</option>
                                         <option value="10">10 min</option>
@@ -674,7 +762,7 @@ export default function NewService() {
                                     <select
                                         value={bufferPost}
                                         onChange={(e) => setBufferPost(e.target.value)}
-                                        className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+                                        className={`w-full px-4 py-2.5 rounded-lg border outline-none appearance-none ${theme === 'dark' ? 'bg-black border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
                                     >
                                         <option value="5">5 min</option>
                                         <option value="10">10 min</option>

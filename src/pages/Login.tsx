@@ -276,6 +276,7 @@ export default function Login() {
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder={isSignUp ? "Crie uma senha forte" : "Digite sua senha"}
                                     className="w-full glass rounded-xl pl-12 pr-12 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                                    autoComplete={isSignUp ? "new-password" : "current-password"}
                                     required
                                 />
                                 <button
@@ -305,6 +306,7 @@ export default function Login() {
                                         value={confirmPassword}
                                         onChange={(e) => setConfirmPassword(e.target.value)}
                                         placeholder="Repita sua senha"
+                                        autoComplete="new-password"
                                         className={`w-full glass rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 transition-all ${confirmPassword && password !== confirmPassword
                                             ? 'focus:ring-red-500 border-red-500/50'
                                             : 'focus:ring-purple-500'

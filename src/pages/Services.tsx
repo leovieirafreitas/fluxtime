@@ -103,7 +103,7 @@ export default function Services() {
     });
 
     return (
-        <>
+        <div style={{ backgroundColor: theme === 'dark' ? '#000000' : '#ffffff' }} className="min-h-screen transition-colors duration-300">
             <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
             <div className="md:ml-64 p-4 md:p-8">
@@ -136,7 +136,7 @@ export default function Services() {
                     </div>
 
                     {/* Barra de Busca e Ações */}
-                    <div className={`flex items-center gap-3 mb-6 p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'
+                    <div className={`flex items-center gap-3 mb-6 p-4 rounded-xl border ${theme === 'dark' ? 'bg-black border-slate-700' : 'bg-white border-slate-200'
                         }`}>
                         <div className="flex-1 relative">
                             <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'
@@ -147,7 +147,7 @@ export default function Services() {
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className={`w-full pl-10 pr-4 py-2 rounded-lg border transition-colors ${theme === 'dark'
-                                    ? 'bg-slate-900 border-slate-700 text-white placeholder-slate-500'
+                                    ? 'bg-black border-slate-700 text-white placeholder-slate-500'
                                     : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400'
                                     }`}
                             />
@@ -200,18 +200,18 @@ export default function Services() {
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                         </div>
                     ) : filteredServices.length === 0 ? (
-                        <div className={`text-center py-12 rounded-xl border ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'
+                        <div className={`text-center py-12 rounded-xl border ${theme === 'dark' ? 'bg-black border-slate-700' : 'bg-white border-slate-200'
                             }`}>
                             <p className={theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}>
                                 {searchTerm ? 'Nenhum serviço encontrado' : 'Nenhum serviço cadastrado'}
                             </p>
                         </div>
                     ) : (
-                        <div className={`rounded-xl border overflow-hidden ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'
+                        <div className={`rounded-xl border overflow-hidden ${theme === 'dark' ? 'bg-black border-slate-700' : 'bg-white border-slate-200'
                             }`}>
                             <table className="w-full">
                                 <thead>
-                                    <tr className={`border-b ${theme === 'dark' ? 'border-slate-700 bg-slate-900/50' : 'border-slate-200 bg-slate-50'
+                                    <tr className={`border-b ${theme === 'dark' ? 'border-slate-700 bg-black' : 'border-slate-200 bg-slate-50'
                                         }`}>
                                         <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
                                             }`}>
@@ -249,7 +249,7 @@ export default function Services() {
                                         <tr
                                             key={service.id}
                                             onClick={() => navigate(`/catalog/services/${service.id}`)}
-                                            className={`transition-colors cursor-pointer ${theme === 'dark' ? 'hover:bg-slate-700/50' : 'hover:bg-slate-50'
+                                            className={`transition-colors cursor-pointer ${theme === 'dark' ? 'hover:bg-slate-900' : 'hover:bg-slate-50'
                                                 }`}
                                         >
                                             <td className="px-6 py-4">
@@ -289,8 +289,8 @@ export default function Services() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${(service.visibility === 'public' || (service.active && !service.visibility))
-                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                                    : 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-400'
+                                                    ? 'bg-green-10 text-green-900 dark:bg-green-400/10 dark:text-green-400'
+                                                    : 'bg-slate-50 text-slate-800 dark:bg-slate-700 dark:text-slate-400'
                                                     }`}>
                                                     {formatVisibility(service.visibility, service.active)}
                                                 </span>
@@ -318,6 +318,6 @@ export default function Services() {
                     )}
                 </div>
             </div>
-        </>
+        </div>
     );
 }

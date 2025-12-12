@@ -120,7 +120,7 @@ export default function Clients() {
                     </div>
 
                     {/* Filters */}
-                    <div className={`rounded-xl p-4 shadow-sm border flex flex-col md:flex-row gap-4 justify-between items-center ${theme === 'dark' ? 'bg-neutral-900 border-slate-800' : 'bg-white border-slate-200'
+                    <div className={`rounded-xl p-4 shadow-sm border flex flex-col md:flex-row gap-4 justify-between items-center ${theme === 'dark' ? 'bg-black border-slate-800' : 'bg-white border-slate-200'
                         }`}>
                         <div className="relative w-full md:w-96">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -154,11 +154,11 @@ export default function Clients() {
                     </div>
 
                     {/* Table */}
-                    <div className={`rounded-xl shadow-sm border overflow-hidden ${theme === 'dark' ? 'bg-neutral-900 border-slate-800' : 'bg-white border-slate-200'
+                    <div className={`rounded-xl shadow-sm border overflow-hidden ${theme === 'dark' ? 'bg-black border-slate-800' : 'bg-white border-slate-200'
                         }`}>
                         <div className="overflow-x-auto">
                             <table className="w-full">
-                                <thead className={`border-b ${theme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                                <thead className={`border-b ${theme === 'dark' ? 'bg-black border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                                     <tr>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Nome</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Celular</th>
@@ -185,7 +185,7 @@ export default function Clients() {
                                         </tr>
                                     ) : (
                                         filteredClients.map((client) => (
-                                            <tr key={client.id} className={`transition-colors ${theme === 'dark' ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
+                                            <tr key={client.id} className={`transition-colors ${theme === 'dark' ? 'hover:bg-slate-900' : 'hover:bg-slate-50'}`}>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="flex items-center gap-3">
                                                         <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${theme === 'dark' ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-600'
@@ -215,7 +215,7 @@ export default function Clients() {
                                 </tbody>
                             </table>
                         </div>
-                        <div className={`px-6 py-4 border-t flex items-center justify-between text-sm text-slate-500 ${theme === 'dark' ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-50'
+                        <div className={`px-6 py-4 border-t flex items-center justify-between text-sm text-slate-500 ${theme === 'dark' ? 'border-slate-800 bg-black' : 'border-slate-200 bg-slate-50'
                             }`}>
                             <span>{filteredClients.length} clientes</span>
                             <div className="flex gap-2">
@@ -230,7 +230,7 @@ export default function Clients() {
             {/* Modal de Criação */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className={`rounded-2xl w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200 ${theme === 'dark' ? 'bg-neutral-900 border border-slate-800' : 'bg-white'
+                    <div className={`rounded-2xl w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200 ${theme === 'dark' ? 'bg-black border border-slate-800' : 'bg-white'
                         }`}>
                         <div className={`flex items-center justify-between p-6 border-b ${theme === 'dark' ? 'border-slate-800' : 'border-slate-100'}`}>
                             <h2 className={`text-xl font-bold flex items-center gap-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
@@ -246,7 +246,7 @@ export default function Clients() {
 
                         <form onSubmit={handleCreateClient} className="p-6 space-y-6">
                             {/* Alerta */}
-                            <div className={`rounded-xl p-4 flex gap-3 border ${theme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-100'
+                            <div className={`rounded-xl p-4 flex gap-3 border ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-100'
                                 }`}>
                                 <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
                                 <div className="space-y-1">
@@ -270,8 +270,8 @@ export default function Clients() {
                                         value={formData.name}
                                         onChange={e => setFormData({ ...formData, name: e.target.value })}
                                         className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${theme === 'dark'
-                                                ? 'bg-black border-slate-800 text-white placeholder:text-slate-600'
-                                                : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'
+                                            ? 'bg-black border-slate-800 text-white placeholder:text-slate-600'
+                                            : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'
                                             }`}
                                     />
                                     <p className="text-xs text-slate-500">Dica: preencha o nome completo para fácil identificação</p>
@@ -291,8 +291,8 @@ export default function Clients() {
                                             value={formData.phone}
                                             onChange={e => setFormData({ ...formData, phone: e.target.value })}
                                             className={`w-full pl-11 pr-4 py-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${theme === 'dark'
-                                                    ? 'bg-black border-slate-800 text-white placeholder:text-slate-600'
-                                                    : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'
+                                                ? 'bg-black border-slate-800 text-white placeholder:text-slate-600'
+                                                : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'
                                                 }`}
                                         />
                                     </div>
@@ -312,8 +312,8 @@ export default function Clients() {
                                             value={formData.email}
                                             onChange={e => setFormData({ ...formData, email: e.target.value })}
                                             className={`w-full pl-11 pr-4 py-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${theme === 'dark'
-                                                    ? 'bg-black border-slate-800 text-white placeholder:text-slate-600'
-                                                    : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'
+                                                ? 'bg-black border-slate-800 text-white placeholder:text-slate-600'
+                                                : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'
                                                 }`}
                                         />
                                     </div>

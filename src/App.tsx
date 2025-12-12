@@ -19,6 +19,8 @@ import NewService from './pages/NewService';
 import ServiceCategories from './pages/ServiceCategories';
 import ClientLogin from './pages/ClientLogin';
 import ClientDashboard from './pages/ClientDashboard';
+import Reviews from './pages/Reviews';
+import Links from './pages/Links';
 import { UserProfileProvider } from './contexts/UserProfileContext';
 
 
@@ -103,6 +105,14 @@ function App() {
           <Route
             path="/site/customization"
             element={session ? <SiteCustomization /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/site/reviews"
+            element={session ? <Reviews /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/site/links"
+            element={session ? <Links /> : <Navigate to="/login" />}
           />
           <Route
             path="/catalog/services"

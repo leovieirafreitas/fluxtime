@@ -322,7 +322,7 @@ export default function Appointments() {
                                 Agenda / {currentDate.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}
                                 <span className="ml-2 text-xs font-normal text-slate-500">({companyTimezone})</span>
                             </h1>
-                            <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg ml-2">
+                            <div className={`flex items-center rounded-lg ml-2 ${theme === 'dark' ? 'bg-slate-900' : 'bg-slate-100'}`}>
                                 <button
                                     onClick={() => {
                                         const newDate = new Date(currentDate);
@@ -333,7 +333,7 @@ export default function Appointments() {
                                         }
                                         setCurrentDate(newDate);
                                     }}
-                                    className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-l-lg transition-colors"
+                                    className={`p-1 rounded-l-lg transition-colors ${theme === 'dark' ? 'hover:bg-black' : 'hover:bg-slate-200'}`}
                                 >
                                     <ChevronLeft className="w-4 h-4 text-slate-500" />
                                 </button>
@@ -347,7 +347,7 @@ export default function Appointments() {
                                         }
                                         setCurrentDate(newDate);
                                     }}
-                                    className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-r-lg transition-colors"
+                                    className={`p-1 rounded-r-lg transition-colors ${theme === 'dark' ? 'hover:bg-black' : 'hover:bg-slate-200'}`}
                                 >
                                     <ChevronRight className="w-4 h-4 text-slate-500" />
                                 </button>
@@ -355,7 +355,7 @@ export default function Appointments() {
                         </div>
                         <button
                             onClick={() => setCurrentDate(new Date())}
-                            className="px-4 py-1.5 text-sm font-medium border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                            className={`px-4 py-1.5 text-sm font-medium border rounded-lg transition-colors ${theme === 'dark' ? 'border-slate-700 hover:bg-black' : 'border-slate-200 hover:bg-slate-50'}`}
                         >
                             Hoje
                         </button>
@@ -396,14 +396,14 @@ export default function Appointments() {
 
                             {/* Settings Dropdown/Panel */}
                             {showSettings && (
-                                <div className={`absolute top-full right-0 mt-2 w-80 rounded-xl shadow-xl border z-50 p-4 ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+                                <div className={`absolute top-full right-0 mt-2 w-80 rounded-xl shadow-xl border z-50 p-4 ${theme === 'dark' ? 'bg-black border-slate-800' : 'bg-white border-slate-200'
                                     }`}>
-                                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg mb-4">
+                                    <div className={`flex p-1 rounded-lg mb-4 ${theme === 'dark' ? 'bg-slate-900' : 'bg-slate-100'}`}>
                                         <button
                                             onClick={() => setViewMode('grid')}
                                             className={`flex-1 py-1.5 text-sm font-medium rounded-md shadow-sm transition-colors ${viewMode === 'grid'
-                                                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white'
-                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                                                ? theme === 'dark' ? 'bg-black text-white' : 'bg-white text-slate-900'
+                                                : theme === 'dark' ? 'text-slate-400 hover:text-slate-300' : 'text-slate-500 hover:text-slate-700'
                                                 }`}
                                         >
                                             Grade
@@ -411,8 +411,8 @@ export default function Appointments() {
                                         <button
                                             onClick={() => setViewMode('calendar')}
                                             className={`flex-1 py-1.5 text-sm font-medium rounded-md shadow-sm transition-colors ${viewMode === 'calendar'
-                                                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white'
-                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                                                ? theme === 'dark' ? 'bg-black text-white' : 'bg-white text-slate-900'
+                                                : theme === 'dark' ? 'text-slate-400 hover:text-slate-300' : 'text-slate-500 hover:text-slate-700'
                                                 }`}
                                         >
                                             Calendário
@@ -427,11 +427,11 @@ export default function Appointments() {
                                                 <div className="flex flex-col gap-0.5">
                                                     <button
                                                         onClick={() => setNumDays(n => Math.min(n + 1, 7))}
-                                                        className="w-4 h-4 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded text-xs hover:bg-slate-200"
+                                                        className={`w-4 h-4 flex items-center justify-center rounded text-xs ${theme === 'dark' ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                                                     >+</button>
                                                     <button
                                                         onClick={() => setNumDays(n => Math.max(n - 1, 1))}
-                                                        className="w-4 h-4 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded text-xs hover:bg-slate-200"
+                                                        className={`w-4 h-4 flex items-center justify-center rounded text-xs ${theme === 'dark' ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                                                     >-</button>
                                                 </div>
                                             </div>
@@ -439,7 +439,7 @@ export default function Appointments() {
 
                                         <div className="flex items-center justify-between">
                                             <span className={`text-sm ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>Zoom</span>
-                                            <div className="flex items-center gap-2 border rounded-lg px-2 py-1 dark:border-slate-700">
+                                            <div className={`flex items-center gap-2 border rounded-lg px-2 py-1 ${theme === 'dark' ? 'border-slate-700' : 'border-slate-200'}`}>
                                                 <button className="text-slate-500 hover:text-slate-700" onClick={() => setZoomLevel(z => Math.max(z - 5, 50))}>
                                                     <Minus className="w-3 h-3" />
                                                 </button>
@@ -481,16 +481,16 @@ export default function Appointments() {
                 </div>
 
                 {/* Main Calendar Grid */}
-                <div className="flex-1 overflow-auto bg-slate-50 dark:bg-neutral-900 relative flex flex-col">
+                <div className={`flex-1 overflow-auto relative flex flex-col ${theme === 'dark' ? 'bg-neutral-900' : 'bg-slate-50'}`}>
                     {viewMode === 'grid' ? (
                         <>
                             {/* Header Row (Days) */}
-                            <div className="flex sticky top-0 z-10 bg-white dark:bg-black border-b border-slate-200 dark:border-slate-800">
-                                <div className="w-16 border-r border-slate-200 dark:border-slate-800 p-3 text-xs font-medium text-slate-400 flex items-center justify-center">
+                            <div className={`flex sticky top-0 z-20 border-b ${theme === 'dark' ? 'bg-black border-slate-800' : 'bg-white border-slate-200'}`}>
+                                <div className={`w-16 border-r p-3 text-xs font-medium flex items-center justify-center ${theme === 'dark' ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-slate-500'}`}>
                                     GMT
                                 </div>
                                 {weekDays.map((day, index) => (
-                                    <div key={index} className="flex-1 p-3 border-r border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center gap-1">
+                                    <div key={index} className={`flex-1 p-3 border-r flex flex-col items-center justify-center gap-1 ${theme === 'dark' ? 'border-slate-800' : 'border-slate-200'}`}>
                                         <span className={`text-xs font-medium uppercase ${day.isToday ? 'text-blue-600' : 'text-slate-500'}`}>
                                             {day.name}
                                         </span>
@@ -532,7 +532,7 @@ export default function Appointments() {
                                         style={{ height: `${(zoomLevel / 100) * 80}px` }}
                                     >
                                         {/* Time Label */}
-                                        <div className="w-16 flex-none border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-black/50 text-xs text-slate-400 p-2 text-center">
+                                        <div className={`w-16 flex-none border-r text-xs p-2 text-center ${theme === 'dark' ? 'border-slate-800 bg-black/50 text-slate-400' : 'border-slate-200 bg-white text-slate-500'}`}>
                                             {hour.toString().padStart(2, '0')}:00
                                         </div>
 
@@ -553,12 +553,13 @@ export default function Appointments() {
                                             return (
                                                 <div
                                                     key={`${day.name}-${hour}`}
-                                                    className={`flex-1 border-r border-slate-100 dark:border-slate-800/50 relative group transition-colors 
+                                                    className={`flex-1 border-r relative group transition-colors 
+                                                        ${theme === 'dark' ? 'border-slate-800/50' : 'border-slate-200'}
                                                         ${!isAllowed
-                                                            ? 'bg-slate-100/50 dark:bg-neutral-900/80 cursor-not-allowed'
+                                                            ? theme === 'dark' ? 'bg-neutral-900/80 cursor-not-allowed' : 'bg-slate-100 cursor-not-allowed'
                                                             : !isOpen && showBusinessHours
-                                                                ? 'bg-slate-50/80 dark:bg-white/[0.02] bg-[length:12px_12px] repeating-linear-gradient-45' // simplified pattern class name or style
-                                                                : 'bg-white/50 dark:bg-transparent hover:bg-slate-50 dark:hover:bg-white/5'
+                                                                ? theme === 'dark' ? 'bg-white/[0.02]' : 'bg-slate-50'
+                                                                : theme === 'dark' ? 'bg-transparent hover:bg-white/5' : 'bg-white hover:bg-slate-50'
                                                         }`}
                                                     style={!isOpen && showBusinessHours ? { backgroundImage: 'linear-gradient(45deg, rgba(0,0,0,0.04) 25%, transparent 25%, transparent 50%, rgba(0,0,0,0.04) 50%, rgba(0,0,0,0.04) 75%, transparent 75%, transparent)', backgroundSize: '12px 12px' } : {}}
                                                 >
@@ -586,37 +587,37 @@ export default function Appointments() {
                                                                 </div>
 
                                                                 {/* Hover Details Card */}
-                                                                <div className="hidden group-hover:block absolute left-0 top-0 w-[200px] z-50 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 p-3 min-h-full">
+                                                                <div className={`hidden group-hover:block absolute left-0 top-0 w-[200px] z-50 rounded-lg shadow-xl border p-3 min-h-full ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
                                                                     <div className="flex flex-col gap-2">
                                                                         <div>
-                                                                            <span className="font-bold text-slate-900 dark:text-white block">{apt.client_name}</span>
-                                                                            <span className="text-xs text-slate-500 dark:text-slate-400 block">{apt.service?.name}</span>
+                                                                            <span className={`font-bold block ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{apt.client_name}</span>
+                                                                            <span className={`text-xs block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>{apt.service?.name}</span>
                                                                         </div>
 
                                                                         {apt.professional?.full_name && (
                                                                             <div className="text-xs">
-                                                                                <span className="text-slate-500 dark:text-slate-400">Prof: </span>
-                                                                                <span className="font-medium text-slate-700 dark:text-slate-300">{apt.professional.full_name}</span>
+                                                                                <span className={`${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Prof: </span>
+                                                                                <span className={`font-medium ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>{apt.professional.full_name}</span>
                                                                             </div>
                                                                         )}
 
                                                                         {apt.service?.price !== undefined && (
                                                                             <div className="text-xs">
-                                                                                <span className="text-slate-500 dark:text-slate-400">Valor: </span>
-                                                                                <span className="font-medium text-slate-700 dark:text-slate-300">
+                                                                                <span className={`${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Valor: </span>
+                                                                                <span className={`font-medium ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>
                                                                                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(apt.service.price)}
                                                                                 </span>
                                                                             </div>
                                                                         )}
 
                                                                         {apt.notes && (
-                                                                            <div className="text-xs border-t border-slate-100 dark:border-slate-700 pt-2 mt-1">
-                                                                                <span className="text-slate-500 dark:text-slate-400 block mb-0.5">Obs:</span>
-                                                                                <span className="text-slate-700 dark:text-slate-300 italic">{apt.notes}</span>
+                                                                            <div className={`text-xs border-t pt-2 mt-1 ${theme === 'dark' ? 'border-slate-700' : 'border-slate-200'}`}>
+                                                                                <span className={`block mb-0.5 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Obs:</span>
+                                                                                <span className={`italic ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>{apt.notes}</span>
                                                                             </div>
                                                                         )}
 
-                                                                        <div className="text-[10px] text-slate-400 pt-1">
+                                                                        <div className={`text-[10px] pt-1 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
                                                                             {apt.start_date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {apt.end_date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                                         </div>
                                                                     </div>
@@ -639,7 +640,7 @@ export default function Appointments() {
                         </>
                     ) : (
                         // Month View Calendar
-                        <div className="flex flex-col h-full bg-white dark:bg-neutral-900">
+                        <div className={`flex flex-col h-full ${theme === 'dark' ? 'bg-neutral-900' : 'bg-white'}`}>
                             {/* Month View Header */}
                             <div className="grid grid-cols-7 border-b border-slate-200 dark:border-slate-800">
                                 {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((day) => (

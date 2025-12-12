@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { whatsappService } from '../services/whatsapp';
-import { MapPin, Clock, Star } from 'lucide-react';
+import { MapPin, Clock, Star, Instagram, Facebook, Globe, BookOpen, MessageCircle } from 'lucide-react';
 import DatePicker from '../components/DatePicker';
 import OTPInput from '../components/OTPInput';
 
@@ -129,6 +129,19 @@ export default function PublicCompanyPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [timeLeft, setTimeLeft] = useState(0);
 
+    // Reviews State
+    const [reviews, setReviews] = useState<any[]>([]);
+    const [reviewRating, setReviewRating] = useState(0);
+    const [reviewHoverRating, setReviewHoverRating] = useState(0);
+    const [reviewName, setReviewName] = useState('');
+    const [reviewComment, setReviewComment] = useState('');
+    const [submittingReview, setSubmittingReview] = useState(false);
+    const [reviewSubmitted, setReviewSubmitted] = useState(false);
+    const [averageRating, setAverageRating] = useState(0);
+
+    // Company Links State
+    const [companyLinks, setCompanyLinks] = useState<any>(null);
+
     useEffect(() => {
         if (timeLeft > 0) {
             const timerId = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
@@ -146,6 +159,18 @@ export default function PublicCompanyPage() {
             fetchCompanyData();
         }
     }, [slug]);
+
+    // Auto-scroll to reviews section if hash is present
+    useEffect(() => {
+        if (window.location.hash === '#reviews' && !loading) {
+            setTimeout(() => {
+                const reviewsSection = document.getElementById('reviews');
+                if (reviewsSection) {
+                    reviewsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 500);
+        }
+    }, [loading]);
 
     // Load client session and check against specific company ONCE company is loaded
     useEffect(() => {
@@ -255,6 +280,103 @@ export default function PublicCompanyPage() {
         }
 
     };
+
+    // Fetch reviews
+    const fetchReviews = async (companyId: string) => {
+        try {
+            const { data, error } = await supabase
+                .from('reviews')
+                .select('*')
+                .eq('company_id', companyId)
+                .order('created_at', { ascending: false })
+                .limit(10);
+
+            if (error) throw error;
+
+            setReviews(data || []);
+
+            // Calculate average rating
+            if (data && data.length > 0) {
+                const avg = data.reduce((sum: number, review: any) => sum + review.rating, 0) / data.length;
+                setAverageRating(Math.round(avg * 10) / 10);
+            }
+        } catch (error) {
+            console.error('Error fetching reviews:', error);
+        }
+    };
+
+    // Submit review
+    const handleSubmitReview = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!reviewRating || !reviewName.trim() || !company) {
+            alert('Por favor, preencha seu nome e selecione uma avaliação.');
+            return;
+        }
+
+        setSubmittingReview(true);
+        try {
+            const { error } = await supabase
+                .from('reviews')
+                .insert({
+                    company_id: company.id,
+                    client_name: reviewName.trim(),
+                    rating: reviewRating,
+                    comment: reviewComment.trim() || null
+                });
+
+            if (error) throw error;
+
+            setReviewSubmitted(true);
+            setReviewRating(0);
+            setReviewName('');
+            setReviewComment('');
+
+            // Refresh reviews
+            fetchReviews(company.id);
+
+            // Reset after 3 seconds
+            setTimeout(() => setReviewSubmitted(false), 3000);
+        } catch (error) {
+            console.error('Error submitting review:', error);
+            alert('Erro ao enviar avaliação. Tente novamente.');
+        } finally {
+            setSubmittingReview(false);
+        }
+    };
+
+    // Load reviews when company loads
+    useEffect(() => {
+        if (company?.id) {
+            fetchReviews(company.id);
+            fetchCompanyLinks(company.id);
+        }
+    }, [company]);
+
+    // Auto-fill review name if client is logged in
+    useEffect(() => {
+        if (isClientLoggedIn && clientName && !reviewName) {
+            setReviewName(clientName);
+        }
+    }, [isClientLoggedIn, clientName]);
+
+    // Fetch company links
+    const fetchCompanyLinks = async (companyId: string) => {
+        try {
+            const { data, error } = await supabase
+                .from('company_links')
+                .select('*')
+                .eq('company_id', companyId)
+                .single();
+
+            if (error && error.code !== 'PGRST116') throw error;
+            setCompanyLinks(data);
+        } catch (error) {
+            console.error('Error fetching company links:', error);
+        }
+    };
+
+
 
     // Fetch busy slots
     useEffect(() => {
@@ -675,6 +797,66 @@ export default function PublicCompanyPage() {
                                 <a href="#services" className="text-slate-700 hover:text-slate-900 font-medium">Serviços</a>
                                 <a href="#about" className="text-slate-700 hover:text-slate-900 font-medium">Sobre</a>
                             </nav>
+                            {/* Social Links */}
+                            {companyLinks && (
+                                <div className="flex items-center gap-3 border-l border-slate-200 pl-6">
+                                    {companyLinks.instagram && (
+                                        <a
+                                            href={companyLinks.instagram}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-slate-600 hover:text-pink-600 transition-colors"
+                                            title="Instagram"
+                                        >
+                                            <Instagram className="w-5 h-5" />
+                                        </a>
+                                    )}
+                                    {companyLinks.facebook && (
+                                        <a
+                                            href={companyLinks.facebook}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-slate-600 hover:text-blue-600 transition-colors"
+                                            title="Facebook"
+                                        >
+                                            <Facebook className="w-5 h-5" />
+                                        </a>
+                                    )}
+                                    {companyLinks.website && (
+                                        <a
+                                            href={companyLinks.website}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-slate-600 hover:text-slate-900 transition-colors"
+                                            title="Website"
+                                        >
+                                            <Globe className="w-5 h-5" />
+                                        </a>
+                                    )}
+                                    {companyLinks.ebook && (
+                                        <a
+                                            href={companyLinks.ebook}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-slate-600 hover:text-green-600 transition-colors"
+                                            title="E-book"
+                                        >
+                                            <BookOpen className="w-5 h-5" />
+                                        </a>
+                                    )}
+                                    {companyLinks.whatsapp && (
+                                        <a
+                                            href={companyLinks.whatsapp}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-slate-600 hover:text-green-500 transition-colors"
+                                            title="WhatsApp"
+                                        >
+                                            <MessageCircle className="w-5 h-5" />
+                                        </a>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="hidden md:flex items-center gap-6">
@@ -825,20 +1007,164 @@ export default function PublicCompanyPage() {
                                 {/* Reviews Section */}
                                 <section id="reviews">
                                     <h2 className="text-2xl font-bold text-slate-900 mb-6">Avaliações</h2>
-                                    <div className="bg-white rounded-xl p-8 border border-slate-200 text-center">
-                                        <div className="flex justify-center gap-1 mb-4">
-                                            {[1, 2, 3, 4, 5].map((star) => (
-                                                <Star key={star} className="w-6 h-6 text-slate-300" />
+
+                                    {/* Average Rating */}
+                                    {reviews.length > 0 && (
+                                        <div className="bg-white rounded-xl p-6 border border-slate-200 mb-6">
+                                            <div className="flex items-center justify-center gap-4">
+                                                <div className="text-center">
+                                                    <div className="text-4xl font-bold text-slate-900 mb-1">
+                                                        {averageRating.toFixed(1)}
+                                                    </div>
+                                                    <div className="flex justify-center gap-0.5 mb-2">
+                                                        {[1, 2, 3, 4, 5].map((star) => (
+                                                            <Star
+                                                                key={star}
+                                                                className={`w-5 h-5 ${star <= Math.round(averageRating)
+                                                                    ? 'fill-yellow-400 text-yellow-400'
+                                                                    : 'text-slate-300'
+                                                                    }`}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                    <p className="text-sm text-slate-600">
+                                                        {reviews.length} {reviews.length === 1 ? 'avaliação' : 'avaliações'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Review Form */}
+                                    <div className="bg-white rounded-xl p-6 border border-slate-200 mb-6">
+                                        <h3 className="font-bold text-slate-900 mb-4">Deixe sua avaliação</h3>
+                                        {reviewSubmitted ? (
+                                            <div className="text-center py-8">
+                                                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                    <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </div>
+                                                <p className="text-lg font-medium text-slate-900 mb-2">Avaliação enviada!</p>
+                                                <p className="text-sm text-slate-600">Obrigado pelo seu feedback!</p>
+                                            </div>
+                                        ) : (
+                                            <form onSubmit={handleSubmitReview} className="space-y-4">
+                                                {/* Name */}
+                                                <div>
+                                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                                        Seu nome *
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={reviewName}
+                                                        onChange={(e) => setReviewName(e.target.value)}
+                                                        placeholder="Digite seu nome"
+                                                        required
+                                                        readOnly={isClientLoggedIn}
+                                                        className={`w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all ${isClientLoggedIn ? 'bg-slate-50 cursor-not-allowed' : ''}`}
+                                                    />
+                                                    {isClientLoggedIn && (
+                                                        <p className="text-xs text-slate-500 mt-1">
+                                                            ✓ Nome preenchido automaticamente do seu perfil
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                {/* Rating */}
+                                                <div>
+                                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                                        Sua avaliação *
+                                                    </label>
+                                                    <div className="flex justify-center gap-2 py-2">
+                                                        {[1, 2, 3, 4, 5].map((star) => (
+                                                            <button
+                                                                key={star}
+                                                                type="button"
+                                                                onClick={() => setReviewRating(star)}
+                                                                onMouseEnter={() => setReviewHoverRating(star)}
+                                                                onMouseLeave={() => setReviewHoverRating(0)}
+                                                                className="transition-transform hover:scale-110 focus:outline-none"
+                                                            >
+                                                                <Star
+                                                                    className={`w-10 h-10 ${star <= (reviewHoverRating || reviewRating)
+                                                                        ? 'fill-yellow-400 text-yellow-400'
+                                                                        : 'text-slate-300'
+                                                                        }`}
+                                                                />
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    {reviewRating > 0 && (
+                                                        <p className="text-center text-sm text-slate-600 mt-1">
+                                                            {reviewRating === 1 && 'Muito insatisfeito'}
+                                                            {reviewRating === 2 && 'Insatisfeito'}
+                                                            {reviewRating === 3 && 'Neutro'}
+                                                            {reviewRating === 4 && 'Satisfeito'}
+                                                            {reviewRating === 5 && 'Muito satisfeito'}
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                {/* Comment */}
+                                                <div>
+                                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                                        Comentário (opcional)
+                                                    </label>
+                                                    <textarea
+                                                        value={reviewComment}
+                                                        onChange={(e) => setReviewComment(e.target.value)}
+                                                        placeholder="Conte-nos mais sobre sua experiência..."
+                                                        rows={3}
+                                                        className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all resize-none"
+                                                    />
+                                                </div>
+
+                                                {/* Submit */}
+                                                <button
+                                                    type="submit"
+                                                    disabled={submittingReview || !reviewRating}
+                                                    style={{ backgroundColor: accentColor }}
+                                                    className="w-full py-3 rounded-lg text-white font-semibold transition-opacity disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                                                >
+                                                    {submittingReview ? 'Enviando...' : 'Enviar avaliação'}
+                                                </button>
+                                            </form>
+                                        )}
+                                    </div>
+
+                                    {/* Reviews List */}
+                                    {reviews.length > 0 && (
+                                        <div className="space-y-4">
+                                            <h3 className="font-bold text-slate-900">Avaliações recentes</h3>
+                                            {reviews.map((review) => (
+                                                <div key={review.id} className="bg-white rounded-xl p-6 border border-slate-200">
+                                                    <div className="flex items-start justify-between mb-3">
+                                                        <div>
+                                                            <p className="font-medium text-slate-900 mb-1">{review.client_name}</p>
+                                                            <div className="flex gap-0.5">
+                                                                {[1, 2, 3, 4, 5].map((star) => (
+                                                                    <Star
+                                                                        key={star}
+                                                                        className={`w-4 h-4 ${star <= review.rating
+                                                                            ? 'fill-yellow-400 text-yellow-400'
+                                                                            : 'text-slate-300'
+                                                                            }`}
+                                                                    />
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                        <p className="text-xs text-slate-500">
+                                                            {new Date(review.created_at).toLocaleDateString('pt-BR')}
+                                                        </p>
+                                                    </div>
+                                                    {review.comment && (
+                                                        <p className="text-sm text-slate-700">{review.comment}</p>
+                                                    )}
+                                                </div>
                                             ))}
                                         </div>
-                                        <div className="space-y-2 mb-4">
-                                            <div className="h-3 bg-slate-100 rounded w-3/4 mx-auto"></div>
-                                            <div className="h-3 bg-slate-100 rounded w-1/2 mx-auto"></div>
-                                        </div>
-                                        <p className="text-slate-600 mb-4">
-                                            Ainda não há avaliações. Seja o primeiro a compartilhar a sua experiência com {company.name}!
-                                        </p>
-                                    </div>
+                                    )}
                                 </section>
                             </>
                         ) : (

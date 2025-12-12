@@ -40,6 +40,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        // Ignorar rotas que não devem ser cacheadas
+        navigateFallbackDenylist: [/^\/socket\.io/, /^\/api/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
@@ -55,7 +57,7 @@ export default defineConfig({
         ]
       },
       devOptions: {
-        enabled: true
+        enabled: false // Desabilitar PWA em desenvolvimento
       }
     })
   ],
