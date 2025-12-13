@@ -5,6 +5,7 @@ import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { Menu, Info, Clock, Calendar, CheckCircle, AlertCircle, Hourglass, ShieldCheck, UserX } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
+import CustomSelect from '../components/CustomSelect';
 
 interface SchedulingRules {
     slot_interval_minutes: number;
@@ -147,27 +148,6 @@ export default function SchedulingRules() {
         </div>
     );
 
-    const Select = ({ value, onChange, options, suffix = '' }: any) => (
-        <div className="relative">
-            <select
-                value={value}
-                onChange={(e) => onChange(Number(e.target.value))}
-                className={`w-full appearance-none px-4 py-3 pr-10 rounded-lg border focus:ring-2 focus:ring-primary-500 outline-none transition-all ${theme === 'dark'
-                    ? 'bg-black border-slate-700 text-white hover:bg-slate-900'
-                    : 'bg-white border-slate-200 text-slate-900 hover:bg-slate-50'
-                    }`}
-            >
-                {options.map((opt: any) => (
-                    <option key={opt.value} value={opt.value}>
-                        {opt.label} {suffix}
-                    </option>
-                ))}
-            </select>
-            <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none">
-                <svg className={`w-4 h-4 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-            </div>
-        </div>
-    );
 
     return (
         <div style={{ backgroundColor: theme === 'dark' ? '#000000' : '#f8fafc' }} className="min-h-screen transition-colors duration-300">
@@ -194,7 +174,7 @@ export default function SchedulingRules() {
                         <button
                             onClick={handleSave}
                             disabled={saving}
-                            className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 shadow-lg shadow-primary-500/20"
+                            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 shadow-lg shadow-blue-500/20"
                         >
                             {saving ? 'Salvando...' : 'Salvar'}
                         </button>
@@ -227,7 +207,7 @@ export default function SchedulingRules() {
                                         title="Incrementos das vagas de horário"
                                         subtitle="O incremento mínimo que seu cliente vê entre horários disponíveis na hora de agendar."
                                     />
-                                    <Select
+                                    <CustomSelect
                                         value={rules.slot_interval_minutes}
                                         onChange={(val: number) => setRules({ ...rules, slot_interval_minutes: val })}
                                         options={[
@@ -247,25 +227,25 @@ export default function SchedulingRules() {
 
                                     <div className="relative z-10 flex flex-col items-center gap-4 w-64">
                                         {/* Previous Slot */}
-                                        <div className="w-full p-3 rounded-xl bg-white/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-700/50 backdrop-blur-sm transform scale-95 opacity-50 transition-all">
+                                        <div className={`w-full p-3 rounded-xl border backdrop-blur-sm transform scale-95 opacity-50 transition-all ${theme === 'dark' ? 'bg-slate-800/50 border-slate-700/50' : 'bg-slate-100 border-slate-300'}`}>
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700"><Clock className="w-4 h-4 text-slate-400" /></div>
-                                                    <span className="text-sm font-medium text-slate-500">14:00</span>
+                                                    <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700"><Clock className={`w-4 h-4 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`} /></div>
+                                                    <span className={`text-sm font-medium ${theme === 'dark' ? 'text-slate-500' : 'text-slate-700'}`}>14:00</span>
                                                 </div>
                                                 <div className="w-3 h-3 rounded-full border-2 border-slate-300 dark:border-slate-600"></div>
                                             </div>
                                         </div>
 
                                         {/* Active Slot */}
-                                        <div className="w-full p-4 rounded-xl bg-white dark:bg-slate-800 shadow-xl border border-primary-100 dark:border-primary-900/30 transform scale-105 z-20 transition-all ring-1 ring-primary-500/20 relative">
+                                        <div className={`w-full p-4 rounded-xl shadow-xl border transform scale-105 z-20 transition-all ring-1 ring-primary-500/20 relative ${theme === 'dark' ? 'bg-slate-800 border-primary-900/30' : 'bg-white border-primary-200'}`}>
                                             <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary-500 rounded-r-full"></div>
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-3">
                                                     <div className="p-2 rounded-lg bg-primary-50 dark:bg-primary-900/20"><Clock className="w-5 h-5 text-primary-600 dark:text-primary-400" /></div>
                                                     <div>
-                                                        <span className="block text-lg font-bold text-slate-800 dark:text-white">14:{rules.slot_interval_minutes}</span>
-                                                        <span className="text-[10px] uppercase tracking-wider font-semibold text-primary-600 dark:text-primary-400">Disponível</span>
+                                                        <span className={`block text-lg font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>14:{rules.slot_interval_minutes}</span>
+                                                        <span className={`text-[10px] uppercase tracking-wider font-semibold ${theme === 'dark' ? 'text-primary-400' : 'text-primary-600'}`}>Disponível</span>
                                                     </div>
                                                 </div>
                                                 <div className="w-5 h-5 rounded-full border-[5px] border-primary-500 shadow-lg shadow-primary-500/30"></div>
@@ -273,11 +253,11 @@ export default function SchedulingRules() {
                                         </div>
 
                                         {/* Next Slot */}
-                                        <div className="w-full p-3 rounded-xl bg-white/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-700/50 backdrop-blur-sm transform scale-95 opacity-50 transition-all">
+                                        <div className={`w-full p-3 rounded-xl border backdrop-blur-sm transform scale-95 opacity-50 transition-all ${theme === 'dark' ? 'bg-slate-800/50 border-slate-700/50' : 'bg-slate-100 border-slate-300'}`}>
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700"><Clock className="w-4 h-4 text-slate-400" /></div>
-                                                    <span className="text-sm font-medium text-slate-500">14:{rules.slot_interval_minutes * 2}</span>
+                                                    <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700"><Clock className={`w-4 h-4 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`} /></div>
+                                                    <span className={`text-sm font-medium ${theme === 'dark' ? 'text-slate-500' : 'text-slate-700'}`}>14:{rules.slot_interval_minutes * 2}</span>
                                                 </div>
                                                 <div className="w-3 h-3 rounded-full border-2 border-slate-300 dark:border-slate-600"></div>
                                             </div>
@@ -292,7 +272,7 @@ export default function SchedulingRules() {
                                         title="Janela de agendamento"
                                         subtitle="O período relativo até quando seus clientes podem marcar um agendamento."
                                     />
-                                    <Select
+                                    <CustomSelect
                                         value={rules.scheduling_window_days}
                                         onChange={(val: number) => setRules({ ...rules, scheduling_window_days: val })}
                                         options={[
@@ -312,15 +292,15 @@ export default function SchedulingRules() {
 
                                     <div className="w-full max-w-sm px-8 relative z-10">
                                         {/* Calendar Strip */}
-                                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl overflow-hidden border border-slate-100 dark:border-slate-700 ring-1 ring-black/5">
+                                        <div className={`rounded-2xl shadow-xl overflow-hidden border ring-1 ring-black/5 ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
                                             <div className="px-4 py-3 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                                                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Calendário</span>
+                                                <span className={`text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-500' : 'text-slate-700'}`}>Calendário</span>
                                                 <span className="px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[10px] font-bold">Até {rules.scheduling_window_days} dias</span>
                                             </div>
                                             <div className="p-4 grid grid-cols-7 gap-2">
                                                 {[...Array(7)].map((_, i) => (
                                                     <div key={i} className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs border ${i < 4
-                                                        ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300'
+                                                        ? `border text-slate-700 dark:text-slate-300 ${theme === 'dark' ? 'bg-slate-800 border-slate-600' : 'bg-white border-slate-300'}`
                                                         : 'bg-slate-50 dark:bg-slate-900 border-transparent text-slate-300 dark:text-slate-700 opacity-50'
                                                         }`}>
                                                         <span className="opacity-50 text-[8px] mb-0.5">DOM</span>
@@ -332,8 +312,8 @@ export default function SchedulingRules() {
                                                         <div className="h-full bg-green-500 w-3/4 rounded-full shadow-[0_0_10px_rgba(34,197,94,0.5)]"></div>
                                                     </div>
                                                     <div className="flex justify-between mt-1.5">
-                                                        <span className="text-[10px] font-medium text-slate-500">Hoje</span>
-                                                        <span className="text-[10px] font-medium text-slate-400">Limite ({rules.scheduling_window_days}d)</span>
+                                                        <span className={`text-[10px] font-medium ${theme === 'dark' ? 'text-slate-500' : 'text-slate-700'}`}>Hoje</span>
+                                                        <span className={`text-[10px] font-medium ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>Limite ({rules.scheduling_window_days}d)</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -348,7 +328,7 @@ export default function SchedulingRules() {
                                         title="Antecedência para agendar"
                                         subtitle="É a antecedência mínima para agendar, ou seja, o tempo mínimo necessário entre seu cliente agendar e o início do atendimento."
                                     />
-                                    <Select
+                                    <CustomSelect
                                         value={rules.min_notice_minutes}
                                         onChange={(val: number) => setRules({ ...rules, min_notice_minutes: val })}
                                         options={[
@@ -367,12 +347,12 @@ export default function SchedulingRules() {
                                     <div className="w-full max-w-sm px-8">
                                         <div className="relative">
                                             {/* Timeline bar */}
-                                            <div className="h-14 w-full bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-600 flex overflow-hidden">
+                                            <div className={`h-14 w-full rounded-xl shadow-sm border flex overflow-hidden ${theme === 'dark' ? 'bg-slate-800 border-slate-600' : 'bg-white border-slate-300'}`}>
                                                 {/* Blocked Zone */}
                                                 <div className="h-full bg-slate-100 dark:bg-slate-700/50 relative flex items-center justify-center transition-all duration-500" style={{ width: rules.min_notice_minutes > 0 ? '40%' : '0%' }}>
                                                     {rules.min_notice_minutes > 0 && (
                                                         <div className="flex flex-col items-center opacity-70">
-                                                            <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">Bloqueado</div>
+                                                            <div className={`text-[10px] uppercase font-bold mb-1 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>Bloqueado</div>
                                                             <div className="h-1 w-8 bg-slate-300 rounded-full"></div>
                                                         </div>
                                                     )}
@@ -392,7 +372,7 @@ export default function SchedulingRules() {
                                             </div>
 
                                             {/* Labels below */}
-                                            <div className="flex justify-between text-[10px] font-medium text-slate-400 mt-2 px-1">
+                                            <div className={`flex justify-between text-[10px] font-medium mt-2 px-1 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
                                                 <span>Agora</span>
                                                 {rules.min_notice_minutes > 0 && <span style={{ left: '40%', position: 'absolute' }} className="text-slate-600 dark:text-slate-300 font-bold -translate-x-1/2">+ {rules.min_notice_minutes}min</span>}
                                                 <span>Futuro</span>
@@ -422,7 +402,7 @@ export default function SchedulingRules() {
                                     <div className="space-y-4">
                                         <div>
                                             <label className={`text-sm font-medium mb-1 block ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Pré-atendimento</label>
-                                            <Select
+                                            <CustomSelect
                                                 value={rules.gap_before_minutes}
                                                 onChange={(val: number) => setRules({ ...rules, gap_before_minutes: val })}
                                                 options={[
@@ -436,7 +416,7 @@ export default function SchedulingRules() {
                                         </div>
                                         <div>
                                             <label className={`text-sm font-medium mb-1 block ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Pós-atendimento</label>
-                                            <Select
+                                            <CustomSelect
                                                 value={rules.gap_after_minutes}
                                                 onChange={(val: number) => setRules({ ...rules, gap_after_minutes: val })}
                                                 options={[
@@ -471,7 +451,7 @@ export default function SchedulingRules() {
                                             </div>
 
                                             {/* Service Block */}
-                                            <div className="flex-1 h-20 bg-white dark:bg-slate-800 rounded-2xl shadow-xl flex items-center justify-between px-4 z-10 border border-slate-200 dark:border-slate-600 relative mx-[-8px]">
+                                            <div className={`flex-1 h-20 rounded-2xl shadow-xl flex items-center justify-between px-4 z-10 border relative mx-[-8px] ${theme === 'dark' ? 'bg-slate-800 border-slate-600' : 'bg-white border-slate-300'}`}>
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold">JD</div>
                                                     <div>
@@ -550,7 +530,7 @@ export default function SchedulingRules() {
 
                                     <div className="w-full max-w-[280px] perspective-1000">
                                         {/* Notification Card */}
-                                        <div className={`relative bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-2xl border transition-all duration-500
+                                        <div className={`relative rounded-2xl p-5 shadow-2xl border transition-all duration-500 ${theme === 'dark' ? 'bg-slate-800' : 'bg-white'}
                                              ${rules.confirmation_required ? 'border-primary-500 ring-4 ring-primary-500/10 rotate-y-0 scale-100' : 'border-slate-200 dark:border-slate-700 scale-95 opacity-50 grayscale'}`}>
 
                                             {rules.confirmation_required && (
@@ -561,14 +541,14 @@ export default function SchedulingRules() {
                                             )}
 
                                             <div className="flex items-start gap-4 mb-4">
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-400 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
                                                     B
                                                 </div>
                                                 <div className="flex-1">
-                                                    <div className="h-2.5 w-24 bg-slate-800 dark:bg-white rounded-full mb-2 opacity-80"></div>
-                                                    <div className="h-2 w-16 bg-slate-400 rounded-full opacity-50"></div>
+                                                    <div className={`h-2.5 w-24 rounded-full mb-2 opacity-80 ${theme === 'dark' ? 'bg-white' : 'bg-slate-800'}`}></div>
+                                                    <div className={`h-2 w-16 rounded-full opacity-50 ${theme === 'dark' ? 'bg-slate-400' : 'bg-slate-600'}`}></div>
                                                 </div>
-                                                <div className="text-xs text-slate-400 font-medium">14:00</div>
+                                                <div className={`text-xs font-medium ${theme === 'dark' ? 'text-slate-400' : 'text-slate-700'}`}>14:00</div>
                                             </div>
 
                                             <div className="space-y-2.5 mb-5">
@@ -579,8 +559,8 @@ export default function SchedulingRules() {
                                             </div>
 
                                             <div className="flex gap-2">
-                                                <div className="flex-1 h-9 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-500">Recusar</div>
-                                                <div className={`flex-1 h-9 rounded-lg flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-primary-500/30 transition-all ${rules.confirmation_required ? 'bg-primary-500' : 'bg-slate-400'}`}>
+                                                <div className={`flex-1 h-9 rounded-lg flex items-center justify-center text-xs font-bold ${theme === 'dark' ? 'bg-slate-700 text-slate-400' : 'bg-slate-200 text-slate-700'}`}>Recusar</div>
+                                                <div className={`flex-1 h-9 rounded-lg flex items-center justify-center text-xs font-bold shadow-lg shadow-primary-500/30 transition-all ${rules.confirmation_required ? 'bg-blue-600 text-white' : 'bg-slate-400 text-white'}`}>
                                                     Confirmar
                                                 </div>
                                             </div>
@@ -605,7 +585,7 @@ export default function SchedulingRules() {
                                         Estabeleça um limite para que seus clientes possam remarcar agendamentos.
                                     </p>
                                     {rules.cancellation_policy_enabled && (
-                                        <Select
+                                        <CustomSelect
                                             value={rules.cancellation_minutes_limit}
                                             onChange={(val: number) => setRules({ ...rules, cancellation_minutes_limit: val })}
                                             options={[
@@ -630,16 +610,16 @@ export default function SchedulingRules() {
                                         <div className="space-y-8 relative">
                                             {/* Step 1: Booking */}
                                             <div className="flex items-center gap-4 opacity-50">
-                                                <div className="w-[60px] text-right text-xs font-medium text-slate-400">09:00</div>
+                                                <div className={`w-[60px] text-right text-xs font-medium ${theme === 'dark' ? 'text-slate-400' : 'text-slate-700'}`}>09:00</div>
                                                 <div className="w-3 h-3 rounded-full bg-slate-300 dark:bg-slate-600 relative z-10 border-2 border-slate-50 dark:border-slate-800"></div>
-                                                <div className="text-xs text-slate-500">Agendamento criado</div>
+                                                <div className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-slate-700'}`}>Agendamento criado</div>
                                             </div>
 
                                             {/* Step 2: Deadline */}
                                             <div className={`flex items-center gap-4 transition-all duration-300 ${rules.cancellation_policy_enabled ? 'opacity-100' : 'opacity-30 blur-[1px]'}`}>
                                                 <div className="w-[60px] text-right text-xs font-bold text-red-500">LIMITE</div>
                                                 <div className="w-4 h-4 rounded-full bg-red-500 relative z-10 border-2 border-white dark:border-slate-800 shadow-[0_0_0_4px_rgba(239,68,68,0.2)]"></div>
-                                                <div className="bg-white dark:bg-slate-800 border border-red-100 dark:border-red-900/30 shadow-lg dark:shadow-red-900/20 px-3 py-2 rounded-lg flex items-center gap-2">
+                                                <div className={`border shadow-lg px-3 py-2 rounded-lg flex items-center gap-2 ${theme === 'dark' ? 'bg-slate-800 border-red-900/30 shadow-red-900/20' : 'bg-white border-red-200'}`}>
                                                     <AlertCircle className="w-4 h-4 text-red-500" />
                                                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                                                         Taxa cobrada
@@ -649,9 +629,9 @@ export default function SchedulingRules() {
 
                                             {/* Step 3: Appointment */}
                                             <div className="flex items-center gap-4 opacity-50">
-                                                <div className="w-[60px] text-right text-xs font-medium text-slate-400">14:00</div>
+                                                <div className={`w-[60px] text-right text-xs font-medium ${theme === 'dark' ? 'text-slate-400' : 'text-slate-700'}`}>14:00</div>
                                                 <div className="w-3 h-3 rounded-full bg-slate-300 dark:bg-slate-600 relative z-10 border-2 border-slate-50 dark:border-slate-800"></div>
-                                                <div className="text-xs text-slate-500">Início do serviço</div>
+                                                <div className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-slate-700'}`}>Início do serviço</div>
                                             </div>
                                         </div>
                                     </div>
@@ -674,7 +654,7 @@ export default function SchedulingRules() {
                                         Determine a tolerância máxima para atrasos.
                                     </p>
                                     {rules.no_show_policy_enabled && (
-                                        <Select
+                                        <CustomSelect
                                             value={rules.no_show_tolerance_minutes}
                                             onChange={(val: number) => setRules({ ...rules, no_show_tolerance_minutes: val })}
                                             options={[
@@ -694,7 +674,7 @@ export default function SchedulingRules() {
                                     <div className="w-full max-w-[260px]">
                                         <div className={`flex flex-col gap-3 transition-opacity duration-300 ${!rules.no_show_policy_enabled && 'opacity-50 grayscale'}`}>
                                             {/* User Row */}
-                                            <div className="flex items-center gap-3 p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                            <div className={`flex items-center gap-3 p-3 rounded-xl border shadow-sm ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'}`}>
                                                 <div className="relative">
                                                     <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                                                         <UserX className="w-full h-full p-2 text-slate-400" />
@@ -709,7 +689,7 @@ export default function SchedulingRules() {
                                                     <div className="h-2.5 w-20 bg-slate-200 dark:bg-slate-600 rounded mb-1.5"></div>
                                                     <div className="h-2 w-12 bg-slate-100 dark:bg-slate-700 rounded"></div>
                                                 </div>
-                                                <div className="px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded text-[10px] font-bold text-slate-500">
+                                                <div className={`px-2 py-1 rounded text-[10px] font-bold ${theme === 'dark' ? 'bg-slate-700 text-slate-500' : 'bg-slate-200 text-slate-700'}`}>
                                                     14:00
                                                 </div>
                                             </div>
