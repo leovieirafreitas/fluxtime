@@ -153,7 +153,7 @@ export default function SchedulingRules() {
                 value={value}
                 onChange={(e) => onChange(Number(e.target.value))}
                 className={`w-full appearance-none px-4 py-3 pr-10 rounded-lg border focus:ring-2 focus:ring-primary-500 outline-none transition-all ${theme === 'dark'
-                    ? 'bg-slate-800 border-slate-700 text-white hover:bg-slate-750'
+                    ? 'bg-black border-slate-700 text-white hover:bg-slate-900'
                     : 'bg-white border-slate-200 text-slate-900 hover:bg-slate-50'
                     }`}
             >
@@ -203,7 +203,7 @@ export default function SchedulingRules() {
                     {/* Main Content */}
                     <div className="space-y-8">
                         {/* Configurações Gerais */}
-                        <div className={`p-8 rounded-2xl border ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'} shadow-sm`}>
+                        <div className={`p-8 rounded-2xl border ${theme === 'dark' ? 'bg-black border-slate-800' : 'bg-white border-slate-100'} shadow-sm`}>
                             <div className="mb-8">
                                 <div className="flex items-center gap-3 mb-2">
                                     <h2 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Configurações</h2>
@@ -213,7 +213,7 @@ export default function SchedulingRules() {
                                     Defina as regras de agendamento online do seu negócio. As regras serão refletidas no seu site para todos seus serviços.
                                 </p>
 
-                                <div className={`mt-4 p-4 rounded-lg flex gap-3 ${theme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
+                                <div className={`mt-4 p-4 rounded-lg flex gap-3 ${theme === 'dark' ? 'bg-black/50 border border-slate-800' : 'bg-slate-50'}`}>
                                     <Info className={`w-5 h-5 flex-shrink-0 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`} />
                                     <p className={`text-sm ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>
                                         Aqui são as regras globais, caso queira personalizar para serviços específicos, acesse a <a href="#" className="text-primary-500 hover:underline">aba de serviços</a>.
@@ -242,7 +242,7 @@ export default function SchedulingRules() {
                                     />
                                 </div>
                                 {/* Visualização Ilustrativa - Incrementos */}
-                                <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center min-h-[240px]`}>
+                                <div className={`relative overflow-hidden rounded-2xl border flex items-center justify-center min-h-[240px] ${theme === 'dark' ? 'bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700' : 'bg-gradient-to-br from-blue-50 to-indigo-50 border-slate-200'}`}>
                                     <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, gray 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
 
                                     <div className="relative z-10 flex flex-col items-center gap-4 w-64">
@@ -307,7 +307,7 @@ export default function SchedulingRules() {
                                     />
                                 </div>
                                 {/* Visualização Ilustrativa - Janela */}
-                                <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center min-h-[240px]`}>
+                                <div className={`relative overflow-hidden rounded-2xl border flex items-center justify-center min-h-[240px] ${theme === 'dark' ? 'bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700' : 'bg-gradient-to-br from-blue-50 to-indigo-50 border-slate-200'}`}>
                                     <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, gray 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
 
                                     <div className="w-full max-w-sm px-8 relative z-10">
@@ -362,7 +362,7 @@ export default function SchedulingRules() {
                                     />
                                 </div>
                                 {/* Visualização Ilustrativa - Antecedencia */}
-                                <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center min-h-[240px]`}>
+                                <div className={`relative overflow-hidden rounded-2xl border flex items-center justify-center min-h-[240px] ${theme === 'dark' ? 'bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700' : 'bg-gradient-to-br from-blue-50 to-indigo-50 border-slate-200'}`}>
                                     <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, gray 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
                                     <div className="w-full max-w-sm px-8">
                                         <div className="relative">
@@ -401,7 +401,7 @@ export default function SchedulingRules() {
                                             {/* Floating Badge */}
                                             {rules.min_notice_minutes > 0 && (
                                                 <div className="absolute -top-3 left-[40%] -translate-x-1/2">
-                                                    <div className="bg-slate-800 text-white text-[10px] px-2 py-0.5 rounded shadow-lg flex items-center gap-1">
+                                                    <div className={`text-[10px] px-2 py-0.5 rounded shadow-lg flex items-center gap-1 ${theme === 'dark' ? 'bg-slate-800 text-white' : 'bg-slate-700 text-white'}`}>
                                                         <Hourglass className="w-3 h-3 text-yellow-400" />
                                                         Carência
                                                     </div>
@@ -451,7 +451,7 @@ export default function SchedulingRules() {
                                     </div>
                                 </div>
                                 {/* Visualização Ilustrativa - Gaps */}
-                                <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center min-h-[240px]`}>
+                                <div className={`relative overflow-hidden rounded-2xl border flex items-center justify-center min-h-[240px] ${theme === 'dark' ? 'bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700' : 'bg-gradient-to-br from-blue-50 to-indigo-50 border-slate-200'}`}>
                                     <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, gray 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
 
                                     <div className="w-full max-w-sm px-6">
@@ -510,7 +510,7 @@ export default function SchedulingRules() {
                         </div>
 
                         {/* Termo de Compromisso */}
-                        <div className={`p-8 rounded-2xl border ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'} shadow-sm`}>
+                        <div className={`p-8 rounded-2xl border ${theme === 'dark' ? 'bg-black border-slate-800' : 'bg-white border-slate-100'} shadow-sm`}>
                             <div className="mb-8">
                                 <div className="flex items-center gap-3 mb-2">
                                     <h2 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Termo de Compromisso</h2>
@@ -520,7 +520,7 @@ export default function SchedulingRules() {
                                     Após ativar o Termo de Compromisso, seus clientes terão de aceitá-lo para agendar pelo seu site.
                                 </p>
 
-                                <div className={`mt-4 p-4 rounded-lg flex gap-3 ${theme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
+                                <div className={`mt-4 p-4 rounded-lg flex gap-3 ${theme === 'dark' ? 'bg-black/50 border border-slate-800' : 'bg-slate-50'}`}>
                                     <ShieldCheck className={`w-5 h-5 flex-shrink-0 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`} />
                                     <p className={`text-sm ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>
                                         O Termo de Compromisso é um conjunto de regras (ou políticas) com objetivo de proteger seu negócio! São elas: a <b>regra de confirmação</b>, a <b>regra de cancelamento ou remarcação</b> e a <b>regra de atraso ou falta</b>.
@@ -545,7 +545,7 @@ export default function SchedulingRules() {
                                     </p>
                                 </div>
                                 {/* Visualização Ilustrativa - Confirmação */}
-                                <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center min-h-[240px]`}>
+                                <div className={`relative overflow-hidden rounded-2xl border flex items-center justify-center min-h-[240px] ${theme === 'dark' ? 'bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700' : 'bg-gradient-to-br from-blue-50 to-indigo-50 border-slate-200'}`}>
                                     <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, gray 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
 
                                     <div className="w-full max-w-[280px] perspective-1000">
@@ -620,7 +620,7 @@ export default function SchedulingRules() {
                                     )}
                                 </div>
                                 {/* Visualização Ilustrativa - Cancelamento */}
-                                <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center min-h-[240px]`}>
+                                <div className={`relative overflow-hidden rounded-2xl border flex items-center justify-center min-h-[240px] ${theme === 'dark' ? 'bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700' : 'bg-gradient-to-br from-blue-50 to-indigo-50 border-slate-200'}`}>
                                     <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, gray 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
 
                                     {/* Timeline Illustration */}
@@ -688,7 +688,7 @@ export default function SchedulingRules() {
                                     )}
                                 </div>
                                 {/* Visualização Ilustrativa - Atraso */}
-                                <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center min-h-[240px]`}>
+                                <div className={`relative overflow-hidden rounded-2xl border flex items-center justify-center min-h-[240px] ${theme === 'dark' ? 'bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700' : 'bg-gradient-to-br from-blue-50 to-indigo-50 border-slate-200'}`}>
                                     <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, gray 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
 
                                     <div className="w-full max-w-[260px]">

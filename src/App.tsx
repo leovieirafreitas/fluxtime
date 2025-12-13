@@ -59,9 +59,6 @@ function App() {
           <Route path="/client" element={<ClientLogin />} />
           <Route path="/client/dashboard" element={<ClientDashboard />} />
 
-          {/* Rota Pública - Página da Empresa */}
-          <Route path="/:slug" element={<PublicCompanyPage />} />
-
           <Route
             path="/login"
             element={session ? <Navigate to="/dashboard" /> : <Login />}
@@ -134,6 +131,9 @@ function App() {
             path="/"
             element={<Navigate to={session ? "/dashboard" : "/login"} />}
           />
+
+          {/* Rota Pública - Página da Empresa (DEVE SER A ÚLTIMA) */}
+          <Route path="/:slug" element={<PublicCompanyPage />} />
         </Routes>
       </UserProfileProvider>
     </BrowserRouter>
