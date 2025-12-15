@@ -1,9 +1,28 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, BookOpen, Wallet, CreditCard, LogOut, Search, ChevronDown, ExternalLink, Menu, X } from 'lucide-react';
+import { MapPin, Calendar, Clock, ChevronRight, X, ChevronLeft, ChevronDown, LogOut, Menu, ExternalLink, Archive, Coins, Zap, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+// import { useTheme } from '../contexts/ThemeContext';
 
-// Helper to format currency
+interface AppointmentType {
+    id: string;
+    start_time: string;
+    end_time: string;
+    status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+    service_name: string;
+    service_price: number;
+    service_duration: number;
+    company_name: string;
+    company_slug: string;
+    company_logo_url: string;
+    company_address: string;
+    company_id: string;
+    professional_name: string;
+    professional_avatar_url: string;
+    client_phone: string;
+    client_email: string;
+}
+
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
         style: 'currency',
@@ -11,25 +30,42 @@ const formatCurrency = (value: number) => {
     }).format(value);
 };
 
-// Helper for date
-const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+const getStatusStyle = (status: string) => {
+    switch (status) {
+        case 'confirmed':
+            return 'bg-green-100 text-green-700';
+        case 'pending':
+            return 'bg-blue-100 text-blue-700'; // Using blue for 'Agendado' look in screenshot, though technically pending
+        case 'cancelled':
+            return 'bg-red-100 text-red-700';
+        default:
+            return 'bg-slate-100 text-slate-600';
+    }
+};
+
+const getStatusLabel = (status: string) => {
+    switch (status) {
+        case 'confirmed': return 'Confirmado';
+        case 'pending': return 'Agendado';
+        case 'cancelled': return 'Desmarcado'; // "Cancelado" / "Desmarcado"
+        default: return status;
+    }
 };
 
 export default function ClientDashboard() {
     const navigate = useNavigate();
     const [clientName, setClientName] = useState('Cliente');
-    const [appointments, setAppointments] = useState<any[]>([]);
+    const [clientPhone, setClientPhone] = useState('');
+    const [clientEmail, setClientEmail] = useState('');
+    const [appointments, setAppointments] = useState<AppointmentType[]>([]);
     const [myCompanies, setMyCompanies] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [appointmentFilter, setAppointmentFilter] = useState<'future' | 'past'>('future');
+    const [filter, setFilter] = useState<'future' | 'past'>('future');
+
+    // Modals
+    const [selectedAppointment, setSelectedAppointment] = useState<AppointmentType | null>(null);
+    const [isRescheduling, setIsRescheduling] = useState(false);
 
     useEffect(() => {
         const fetchDashboardData = async () => {
@@ -40,31 +76,16 @@ export default function ClientDashboard() {
             }
             const parsed = JSON.parse(session);
             setClientName(parsed.name || 'Cliente');
+            setClientEmail(parsed.email);
 
             let cleanPhone = null;
             if (parsed.phone) {
                 let phoneToClean = parsed.phone.replace(/^\+55/, '').replace(/^55/, '');
                 cleanPhone = phoneToClean.replace(/\D/g, '');
-            }
-
-            // 1. Try to load from cache immediately for "instant" feel
-            const cacheKey = `dashboard_cache_${cleanPhone}`;
-            const cachedData = localStorage.getItem(cacheKey);
-
-            if (cachedData) {
-                try {
-                    const { appointments: cachedApts, companies: cachedComps } = JSON.parse(cachedData);
-                    if (cachedApts) setAppointments(cachedApts);
-                    if (cachedComps) setMyCompanies(cachedComps);
-                    // If we have cache, stop loading immediately
-                    if (cachedApts || cachedComps) setIsLoading(false);
-                } catch (e) {
-                    console.error("Error parsing cache", e);
-                }
+                setClientPhone(cleanPhone);
             }
 
             try {
-                // 2. Fetch fresh data in background
                 const { data: aptData, error: aptError } = await supabase.rpc('get_client_appointments', {
                     p_phone: cleanPhone,
                     p_email: parsed.email
@@ -72,48 +93,12 @@ export default function ClientDashboard() {
 
                 if (aptError) throw aptError;
 
-                const { data: companiesData, error: compError } = await supabase.rpc('get_client_companies', {
+                const { data: companiesData } = await supabase.rpc('get_client_companies', {
                     p_phone: cleanPhone
                 });
 
-                if (compError) console.error("Error fetching companies:", compError);
-
-                // Fetch latest client info to ensure name is correct (for Avatar/Initials)
-                const { data: clientInfoData, error: clientInfoError } = await supabase
-                    .rpc('public_get_global_client_info', { p_phone: cleanPhone });
-
-                if (clientInfoError) {
-                    console.error("Error fetching client info:", clientInfoError);
-                }
-
-                // RPC returns an array, take the first item
-                const freshClientInfo = (clientInfoData && Array.isArray(clientInfoData) && clientInfoData.length > 0) ? clientInfoData[0] : null;
-
-                if (freshClientInfo && freshClientInfo.name) {
-                    setClientName(freshClientInfo.name);
-                    // Update session in localStorage to keep it fresh
-                    const updatedSession = { ...parsed, name: freshClientInfo.name, email: freshClientInfo.email };
-                    localStorage.setItem('client_session', JSON.stringify(updatedSession));
-                }
-
-                const mappedApts = (aptData || []).map((item: any) => ({
-                    id: item.id,
-                    status: item.status,
-                    start_time: item.start_time,
-                    company: { name: item.company_name },
-                    service: { name: item.service_name, price: item.service_price }
-                }));
-
-                // 3. Update state and cache
-                setAppointments(mappedApts);
+                setAppointments(aptData || []);
                 setMyCompanies(companiesData || []);
-
-                localStorage.setItem(cacheKey, JSON.stringify({
-                    appointments: mappedApts,
-                    companies: companiesData || [],
-                    clientInfo: freshClientInfo, // Cache client info too
-                    timestamp: Date.now()
-                }));
 
             } catch (error) {
                 console.error('Error fetching dashboard data:', error);
@@ -130,16 +115,86 @@ export default function ClientDashboard() {
         navigate('/client');
     };
 
+    // Calculate duration for display
+    const getDurationExample = (start: string, end: string) => {
+        if (!start || !end) return '';
+        const s = new Date(start);
+        const e = new Date(end);
+        const diff = (e.getTime() - s.getTime()) / 60000;
+        return `(${diff} min)`;
+    };
+
+    const handleCancelAppointment = async () => {
+        if (!selectedAppointment) return;
+        if (!confirm('Tem certeza que deseja desmarcar este agendamento?')) return;
+
+        try {
+            const { error } = await supabase.rpc('client_cancel_appointment', {
+                p_appointment_id: selectedAppointment.id,
+                p_phone: clientPhone,
+                p_email: clientEmail
+            });
+
+            if (error) throw error;
+
+            // Update local state
+            setAppointments(prev => prev.map(a =>
+                a.id === selectedAppointment.id ? { ...a, status: 'cancelled' } : a
+            ));
+            setSelectedAppointment(null); // Close modal
+            alert('Agendamento desmarcado com sucesso.');
+        } catch (err) {
+            console.error('Error canceling:', err);
+            alert('Erro ao cancelar agendamento.');
+        }
+    };
+
+    const handleConfirmAppointment = async () => {
+        if (!selectedAppointment) return;
+
+        try {
+            const { error } = await supabase.rpc('client_confirm_appointment', {
+                p_appointment_id: selectedAppointment.id,
+                p_phone: clientPhone,
+                p_email: clientEmail
+            });
+
+            if (error) throw error;
+
+            // Update local state
+            setAppointments(prev => prev.map(a =>
+                a.id === selectedAppointment.id ? { ...a, status: 'confirmed' } : a
+            ));
+
+            // Close modal or update selected appointment
+            setSelectedAppointment(prev => prev ? { ...prev, status: 'confirmed' } : null);
+            alert('Agendamento confirmado com sucesso!');
+        } catch (err) {
+            console.error('Error confirming:', err);
+            alert('Erro ao confirmar agendamento.');
+        }
+    };
+
+    // Grouping Logic
+    const filteredAppointments = appointments.filter(apt => {
+        const aptDate = new Date(apt.start_time);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return filter === 'future' ? aptDate >= today : aptDate < today;
+    });
+
+    // Sort by date equivalent to filter
+    filteredAppointments.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+    if (filter === 'past') filteredAppointments.reverse();
+
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
-            {/* Top Navigation */}
-            <header className="bg-white border-b border-slate-200 h-16 px-4 md:px-6 flex items-center justify-between sticky top-0 z-50">
+        <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+            {/* Header */}
+            <header className="bg-white border-b border-slate-200 h-16 px-4 md:px-6 flex items-center justify-between sticky top-0 z-40">
                 <div className="flex items-center gap-2">
                     <img src="/img/MarcaSite.png" alt="FluxTime" className="h-8 w-auto object-contain" />
                     <span className="text-xl md:text-2xl font-bold text-slate-900">FluxTime</span>
                 </div>
-
-                {/* Mobile Menu Button - Right Side */}
                 <button
                     onClick={() => setIsSidebarOpen(true)}
                     className="md:hidden p-2 hover:bg-slate-100 rounded-lg transition-colors"
@@ -148,229 +203,573 @@ export default function ClientDashboard() {
                 </button>
             </header>
 
-            {/* Mobile Sidebar Overlay */}
-            {isSidebarOpen && (
-                <div
-                    className="fixed inset-0 bg-black/50 z-40 md:hidden"
-                    onClick={() => setIsSidebarOpen(false)}
-                />
-            )}
-
-            <div className="flex flex-1 max-w-7xl mx-auto w-full px-4 py-4 md:py-8 gap-8">
-                {/* Sidebar - Desktop & Mobile */}
+            <div className="max-w-5xl mx-auto p-4 md:p-8 flex gap-8">
+                {/* Sidebar (simplified for this view) */}
                 <aside className={`w-64 flex-shrink-0 flex-col gap-6 bg-slate-50 md:bg-transparent
-                    ${isSidebarOpen ? 'fixed inset-y-0 left-0 z-50 flex p-4 pt-20' : 'hidden md:flex'}
+                    ${isSidebarOpen ? 'fixed inset-y-0 left-0 z-50 flex p-4 pt-20 bg-white shadow-2xl' : 'hidden md:flex'}
                     transition-transform duration-300`}>
-                    {/* Mobile Close Button */}
-                    <button
-                        onClick={() => setIsSidebarOpen(false)}
-                        className="md:hidden absolute top-4 right-4 p-2 hover:bg-slate-200 rounded-lg transition-colors"
-                    >
-                        <X className="w-6 h-6 text-slate-600" />
-                    </button>
+                    {isSidebarOpen && <button onClick={() => setIsSidebarOpen(false)} className="absolute top-4 right-4 p-2"><X /></button>}
 
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-                        <button className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 font-medium text-sm transition-colors">
-                            <img src="/img/MarcaSite.png" alt="FluxTime" className="h-7 w-auto object-contain" />
-                            Indique a FluxTime
-                        </button>
-                    </div>
-
-                    <nav className="bg-white rounded-xl shadow-sm border border-slate-200 p-2 space-y-1">
-                        <button className="flex items-center gap-3 w-full p-3 rounded-lg bg-slate-100 text-slate-900 font-medium text-sm">
-                            <Calendar className="w-4 h-4" />
-                            Agendamentos
-                        </button>
-                        <button className="flex items-center gap-3 w-full p-3 rounded-lg text-slate-600 hover:bg-slate-50 font-medium text-sm transition-colors">
-                            <BookOpen className="w-4 h-4" />
-                            Conteúdos
-                        </button>
-                        <button className="flex items-center gap-3 w-full p-3 rounded-lg text-slate-600 hover:bg-slate-50 font-medium text-sm transition-colors">
-                            <Wallet className="w-4 h-4" />
-                            Créditos
-                        </button>
-                        <button className="flex items-center gap-3 w-full p-3 rounded-lg text-slate-600 hover:bg-slate-50 font-medium text-sm transition-colors">
-                            <CreditCard className="w-4 h-4" />
-                            Pagamentos
-                        </button>
-                    </nav>
-
-                    <div className="space-y-3">
-                        <div className="relative">
-                            <input
-                                type="text"
-                                placeholder="Buscar negócios..."
-                                className="w-full h-10 pl-9 pr-3 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none"
-                            />
-                            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                        </div>
-                        <p className="text-xs text-slate-500 px-1">Clique na foto de um negócio para filtrar ou acessar</p>
-
-                        {myCompanies.length > 0 ? (
-                            myCompanies.map((comp) => (
-                                <div
-                                    key={comp.slug}
-                                    onClick={() => navigate(`/${comp.slug}`)}
-                                    className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 hover:border-slate-300 transition-colors cursor-pointer group"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        {comp.logo_url ? (
-                                            <img
-                                                src={comp.logo_url}
-                                                alt={comp.name}
-                                                className="w-8 h-8 rounded object-cover"
-                                            />
-                                        ) : (
-                                            <div className="w-8 h-8 rounded bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold">
-                                                {comp.name.substring(0, 2).toUpperCase()}
-                                            </div>
-                                        )}
-                                        <div className="overflow-hidden">
-                                            <h4 className="text-sm font-medium text-slate-900 truncate">{comp.name}</h4>
-                                            <p className="text-xs text-slate-500">
-                                                membro desde {new Date(comp.member_since).getFullYear()}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); navigate(`/${comp.slug}`); }}
-                                        className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded flex items-center gap-1 group-hover:bg-blue-100 transition-colors"
-                                    >
-                                        Acessar <ExternalLink className="w-3 h-3" />
-                                    </button>
-                                </div>
-                            ))
-                        ) : (
-                            <div className="text-center py-4 text-slate-400 text-sm">
-                                Nenhuma empresa encontrada.
-                            </div>
-                        )}
-                    </div>
-
-                    {/* User Profile Card - At Bottom */}
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                    <div className="px-4 py-3 bg-white border border-slate-200 rounded-xl shadow-sm">
                         <div className="flex items-center gap-3 mb-3">
                             <img
                                 src={`https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=random&color=fff&bold=true`}
                                 alt={clientName}
-                                className="w-12 h-12 rounded-full"
+                                className="w-10 h-10 rounded-full"
                             />
-                            <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-slate-900 truncate">{clientName}</p>
+                            <div className="overflow-hidden">
+                                <p className="font-semibold text-sm truncate">{clientName}</p>
                                 <p className="text-xs text-slate-500">Cliente</p>
                             </div>
                         </div>
-                        <button
-                            onClick={handleLogout}
-                            className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                            <LogOut className="w-4 h-4" />
-                            Sair
+                        <button onClick={handleLogout} className="text-red-600 text-xs font-medium hover:underline flex items-center gap-1">
+                            <LogOut className="w-3 h-3" /> Sair da conta
                         </button>
                     </div>
+
+                    <nav className="space-y-1">
+                        <button className="flex items-center gap-3 w-full p-2.5 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-900 font-medium text-sm">
+                            <Calendar className="w-4 h-4 text-slate-500" /> Agendamentos
+                        </button>
+                        <button className="flex items-center gap-3 w-full p-2.5 rounded-lg text-slate-600 hover:bg-slate-100 font-medium text-sm transition-colors text-left">
+                            <Archive className="w-4 h-4 text-slate-500" /> Conteúdos
+                        </button>
+                        <button className="flex items-center gap-3 w-full p-2.5 rounded-lg text-slate-600 hover:bg-slate-100 font-medium text-sm transition-colors text-left">
+                            <Coins className="w-4 h-4 text-slate-500" /> Créditos
+                        </button>
+                        <button className="flex items-center justify-between w-full p-2.5 rounded-lg bg-slate-100 text-slate-900 font-bold text-sm transition-colors text-left group">
+                            <div className="flex items-center gap-3">
+                                <div className="w-4 h-4 flex items-center justify-center rounded-full border border-slate-900 text-slate-900">
+                                    <span className="text-[10px] font-bold">$</span>
+                                </div>
+                                Pagamentos
+                            </div>
+                            <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">1</span>
+                        </button>
+                    </nav>
+
+                    <button className="w-full flex items-center justify-center gap-2 py-3 bg-white border border-indigo-100 hover:border-indigo-200 hover:shadow-md text-blue-600 font-bold text-sm rounded-xl shadow-sm transition-all">
+                        <Zap className="w-4 h-4 fill-current" /> Indique a FluxTime
+                    </button>
+
+                    <div className="space-y-4">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="Buscar negócios..."
+                                className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 transition-colors"
+                            />
+                        </div>
+                        <p className="text-xs text-slate-500 px-1">Clique na foto de um negócio para filtrar</p>
+
+                        <div className="space-y-2">
+                            {myCompanies.map(comp => (
+                                <button key={comp.id} onClick={() => navigate(`/${comp.slug}`)} className="flex items-center justify-between w-full p-2 rounded-lg hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-100 transition-all text-left group">
+                                    <div className="flex items-center gap-3 overflow-hidden">
+                                        {comp.logo_url ? <img src={comp.logo_url} className="w-8 h-8 rounded-lg object-cover bg-white" /> : <div className="w-8 h-8 rounded-lg bg-slate-200" />}
+                                        <div className="flex flex-col overflow-hidden">
+                                            <span className="truncate font-medium text-slate-900 text-sm">{comp.name}</span>
+                                            <span className="text-[10px] text-slate-500 truncate">há 46 minutos</span>
+                                        </div>
+                                    </div>
+                                    <span className="bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                        Acessar ↗
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                 </aside>
 
-                {/* Main Content */}
-                <main className="flex-1">
-                    <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-slate-200 min-h-[500px] flex flex-col">
-                        <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                            <h2 className="text-lg md:text-xl font-bold text-slate-900">Agendamentos</h2>
-                            <div className="flex bg-slate-100 p-1 rounded-lg w-full sm:w-auto overflow-x-auto">
-                                <button
-                                    onClick={() => setAppointmentFilter('future')}
-                                    className={`px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium whitespace-nowrap rounded-md transition-all ${appointmentFilter === 'future'
-                                        ? 'bg-white shadow-sm text-slate-900'
-                                        : 'text-slate-500 hover:text-slate-700'
-                                        }`}
-                                >
-                                    Futuros
-                                </button>
-                                <button
-                                    onClick={() => setAppointmentFilter('past')}
-                                    className={`px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium whitespace-nowrap rounded-md transition-all ${appointmentFilter === 'past'
-                                        ? 'bg-white shadow-sm text-slate-900'
-                                        : 'text-slate-500 hover:text-slate-700'
-                                        }`}
-                                >
-                                    Passados
-                                </button>
-                                <button className="px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium text-slate-500 hover:text-slate-700 flex items-center gap-1 whitespace-nowrap">
-                                    Por data <ChevronDown className="w-3 h-3" />
-                                </button>
+                {/* Main List */}
+                <main className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-6">
+                        <h1 className="text-2xl font-bold">Agendamentos</h1>
+                        <div className="flex bg-slate-100 p-1 rounded-lg">
+                            <button
+                                onClick={() => setFilter('future')}
+                                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${filter === 'future' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
+                            >
+                                Futuros
+                            </button>
+                            <button
+                                onClick={() => setFilter('past')}
+                                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${filter === 'past' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
+                            >
+                                Passados
+                            </button>
+                            <button className="px-4 py-1.5 text-sm font-medium text-slate-500 flex items-center gap-1">
+                                Por data <ChevronDown className="w-3 h-3" />
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="space-y-8">
+                        {isLoading ? (
+                            <div className="flex items-center justify-center py-12">
+                                <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                            </div>
+                        ) : filteredAppointments.length === 0 ? (
+                            <div className="text-center py-12 text-slate-500">
+                                Nenhum agendamento encontrado.
+                            </div>
+                        ) : (
+                            <div className="space-y-6">
+                                {filteredAppointments.map((apt) => {
+                                    const date = new Date(apt.start_time);
+                                    const day = date.getDate();
+                                    const month = date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+                                    const timeStart = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                                    const timeEnd = new Date(apt.end_time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+                                    return (
+                                        <div key={apt.id} className="flex items-start gap-4 group" onClick={() => setSelectedAppointment(apt)}>
+                                            {/* Date Badge */}
+                                            <div className="flex-shrink-0 w-16 h-16 bg-white border border-slate-200 rounded-2xl flex flex-col items-center justify-center shadow-sm cursor-pointer group-hover:border-blue-200 transition-colors">
+                                                <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{month}</span>
+                                                <span className="text-2xl font-bold text-slate-900">{day}</span>
+                                            </div>
+
+                                            {/* Main Card */}
+                                            <div className="flex-1 bg-white border border-slate-200 rounded-2xl p-4 md:p-5 shadow-sm hover:shadow-md hover:border-blue-200 transition-all cursor-pointer relative">
+                                                {/* Company Header */}
+                                                <div className="flex items-center gap-2 mb-4">
+                                                    {apt.company_logo_url ? (
+                                                        <img src={apt.company_logo_url} className="w-6 h-6 rounded-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-[10px] font-bold text-green-700">
+                                                            {apt.company_name.substring(0, 2).toUpperCase()}
+                                                        </div>
+                                                    )}
+                                                    <span className="font-semibold text-slate-900 text-sm">{apt.company_name}</span>
+                                                </div>
+
+                                                <div className="flex items-start justify-between">
+                                                    <div>
+                                                        <h3 className="text-lg font-bold text-slate-900 mb-1">{apt.service_name}</h3>
+                                                        <div className="flex items-center gap-2 text-slate-500 text-sm mb-2">
+                                                            <Clock className="w-4 h-4" />
+                                                            <span>{timeStart} <span className="text-slate-300 mx-1">→</span> {timeEnd}</span>
+                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${getStatusStyle(apt.status)}`}>
+                                                                {getStatusLabel(apt.status)}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-3 text-sm">
+                                                            <span className="text-slate-600 font-medium">{formatCurrency(apt.service_price)}</span>
+                                                            <span className="px-2 py-0.5 bg-red-50 text-red-600 text-[10px] font-bold rounded">Não pago</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {apt.professional_name && (
+                                                        <div className="hidden sm:flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
+                                                            {apt.professional_avatar_url ? (
+                                                                <img src={apt.professional_avatar_url} className="w-6 h-6 rounded-full object-cover" />
+                                                            ) : (
+                                                                <div className="w-6 h-6 rounded-full bg-slate-200" />
+                                                            )}
+                                                            <span className="text-xs font-medium text-slate-700">{apt.professional_name.split(' ')[0]} {apt.professional_name.split(' ')[1]?.substring(0, 3)}...</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-2 text-slate-500 text-xs md:text-sm">
+                                                    <MapPin className="w-4 h-4 text-slate-400" />
+                                                    <span className="truncate">{apt.company_address}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </main>
+            </div>
+
+            {/* Details Modal */}
+            {selectedAppointment && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-scale-in">
+                        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                            <h2 className="text-xl font-bold text-slate-900">{selectedAppointment.service_name}</h2>
+                            <button onClick={() => setSelectedAppointment(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                                <X className="w-5 h-5 text-slate-500" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            {/* Date & Status */}
+                            <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-slate-500 text-sm">Data e horário</span>
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${getStatusStyle(selectedAppointment.status)}`}>
+                                        {getStatusLabel(selectedAppointment.status)}
+                                    </span>
+                                </div>
+                                <p className="text-lg font-medium text-slate-900">
+                                    {new Date(selectedAppointment.start_time).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                    <span className="mx-2 text-slate-300">-</span>
+                                    {new Date(selectedAppointment.start_time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                    <span className="text-slate-500 text-sm font-normal ml-2">{getDurationExample(selectedAppointment.start_time, selectedAppointment.end_time)}</span>
+                                </p>
+                            </div>
+
+                            {/* Price */}
+                            <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-slate-500 text-sm">Valor</span>
+                                    <span className="px-2 py-0.5 bg-red-50 text-red-600 text-[10px] font-bold rounded">Não pago</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-xl font-medium text-slate-900">{formatCurrency(selectedAppointment.service_price)}</span>
+                                    <button className="text-blue-600 text-sm font-medium border border-blue-200 px-3 py-0.5 rounded hover:bg-blue-50 transition-colors">
+                                        Pagar
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Business */}
+                            <div>
+                                <span className="text-slate-500 text-sm block mb-1">Negócio</span>
+                                <p className="text-base font-medium text-slate-900">{selectedAppointment.company_name}</p>
+                            </div>
+
+                            {/* Professional */}
+                            {selectedAppointment.professional_name && (
+                                <div>
+                                    <span className="text-slate-500 text-sm block mb-1">Profissional</span>
+                                    <div className="flex items-center gap-2">
+                                        {selectedAppointment.professional_avatar_url ? (
+                                            <img src={selectedAppointment.professional_avatar_url} className="w-6 h-6 rounded-full object-cover" />
+                                        ) : (
+                                            <div className="w-6 h-6 rounded-full bg-slate-200" />
+                                        )}
+                                        <p className="text-base font-medium text-slate-900">{selectedAppointment.professional_name}</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Location */}
+                            <div>
+                                <span className="text-slate-500 text-sm block mb-1">No estabelecimento</span>
+                                <p className="text-sm text-slate-900 flex items-start gap-2">
+                                    <MapPin className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                                    <span>
+                                        {selectedAppointment.company_address}
+                                        <a href={`https://maps.google.com/?q=${encodeURIComponent(selectedAppointment.company_address)}`} target="_blank" className="ml-1 text-blue-600 hover:underline inline-flex items-center">
+                                            Como chegar <ExternalLink className="w-3 h-3 ml-0.5" />
+                                        </a>
+                                    </span>
+                                </p>
                             </div>
                         </div>
 
-                        <div className="flex-1 p-4 md:p-6">
-                            {isLoading ? (
-                                <div className="flex items-center justify-center h-full">
-                                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                                </div>
-                            ) : (() => {
-                                // Filter appointments based on selected filter
-                                const filteredAppointments = appointments.filter(apt => {
-                                    const aptDate = new Date(apt.start_time);
-                                    const today = new Date();
-                                    today.setHours(0, 0, 0, 0);
-
-                                    if (appointmentFilter === 'future') {
-                                        return aptDate >= today;
-                                    } else {
-                                        return aptDate < today;
-                                    }
-                                });
-
-                                return filteredAppointments.length > 0 ? (
-                                    <div className="space-y-3 md:space-y-4">
-                                        {filteredAppointments.map((apt) => (
-                                            <div key={apt.id} className="flex flex-col p-4 border border-slate-200 rounded-xl hover:border-blue-300 transition-colors">
-                                                <div className="flex items-start gap-3 md:gap-4 mb-3">
-                                                    <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                        <Calendar className="w-5 h-5 md:w-6 md:h-6" />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <h3 className="font-semibold text-slate-900 text-sm md:text-base truncate">{apt.company?.name || 'Empresa'}</h3>
-                                                        <p className="text-slate-600 font-medium text-sm md:text-base truncate">{apt.service?.name}</p>
-                                                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs md:text-sm text-slate-500 mt-1">
-                                                            <span>{formatDate(apt.start_time)}</span>
-                                                            <span className="hidden sm:inline w-1 h-1 bg-slate-300 rounded-full"></span>
-                                                            <span>{formatCurrency(apt.service?.price || 0)}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center justify-end">
-                                                    <span className={`px-3 py-1 rounded-full text-xs font-medium 
-                                                        ${apt.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                                                            apt.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-600'}`}>
-                                                        {apt.status === 'confirmed' ? 'Confirmado' : apt.status === 'pending' ? 'Pendente' : apt.status}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
+                        {selectedAppointment.status !== 'cancelled' && selectedAppointment.status !== 'completed' && (
+                            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+                                {selectedAppointment.status === 'pending' ? (
+                                    <>
+                                        <button
+                                            onClick={handleCancelAppointment}
+                                            className="px-4 py-2 bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-lg font-medium text-sm transition-colors"
+                                        >
+                                            Recusar
+                                        </button>
+                                        <button
+                                            onClick={handleConfirmAppointment}
+                                            className="px-4 py-2 bg-slate-900 text-white hover:bg-slate-800 rounded-lg font-medium text-sm transition-colors"
+                                        >
+                                            Confirmar
+                                        </button>
+                                    </>
                                 ) : (
-                                    <div className="flex flex-col items-center justify-center h-full text-center">
-                                        <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mb-4 relative">
-                                            <Calendar className="w-8 h-8 text-slate-300" />
-                                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-purple-100 rounded-full flex items-center justify-center">
-                                                <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                                            </div>
-                                        </div>
-                                        <h3 className="text-lg font-medium text-slate-900 mb-1">
-                                            {appointmentFilter === 'future'
-                                                ? 'Você ainda não possui agendamentos futuros'
-                                                : 'Você não possui agendamentos passados'}
-                                        </h3>
-                                        <p className="text-slate-500 text-sm max-w-xs mx-auto">
-                                            {appointmentFilter === 'future'
-                                                ? 'Seus próximos agendamentos aparecerão aqui.'
-                                                : 'Seus agendamentos anteriores aparecerão aqui.'}
-                                        </p>
-                                    </div>
-                                );
-                            })()}
+                                    <>
+                                        <button
+                                            onClick={handleCancelAppointment}
+                                            className="px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg font-medium text-sm transition-colors"
+                                        >
+                                            Desmarcar
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setIsRescheduling(true);
+                                                // Don't close details yet
+                                            }}
+                                            className="px-4 py-2 border border-slate-200 text-slate-700 hover:bg-white bg-white rounded-lg font-medium text-sm transition-colors shadow-sm"
+                                        >
+                                            Remarcar
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        )}
+                        {(selectedAppointment.status === 'cancelled' || selectedAppointment.status === 'completed') && (
+                            <div className="p-4 bg-slate-50 border-t border-slate-100 text-center text-slate-500 text-sm font-medium">
+                                {selectedAppointment.status === 'cancelled' ? 'Agendamento cancelado' : 'Agendamento concluído'}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Reschedule Modal */}
+            {isRescheduling && selectedAppointment && (
+                <RescheduleModal
+                    appointment={selectedAppointment}
+                    onClose={() => setIsRescheduling(false)}
+                    onSuccess={() => {
+                        setIsRescheduling(false);
+                        setSelectedAppointment(null);
+                        // Refresh state
+                        const parsed = JSON.parse(localStorage.getItem('client_session') || '{}');
+                        let cleanPhone = null;
+                        if (parsed.phone) {
+                            cleanPhone = parsed.phone.replace(/^\+55/, '').replace(/^55/, '').replace(/\D/g, '');
+                        }
+                        supabase.rpc('get_client_appointments', {
+                            p_phone: cleanPhone,
+                            p_email: parsed.email
+                        }).then(({ data }: any) => {
+                            if (data) setAppointments(data);
+                        });
+                    }}
+                    clientPhone={clientPhone}
+                    clientEmail={clientEmail}
+                />
+            )}
+        </div>
+    );
+}
+
+// Reschedule Modal Component
+function RescheduleModal({ appointment, onClose, onSuccess, clientPhone, clientEmail }: any) {
+    const [selectedDate, setSelectedDate] = useState(new Date());
+    const [weekDates, setWeekDates] = useState<Date[]>([]);
+    const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+    const [selectedTime, setSelectedTime] = useState<string | null>(null);
+    const [loadingSlots, setLoadingSlots] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Update week dates when selectedDate changes
+    useEffect(() => {
+        const dates = [];
+        const start = new Date(selectedDate);
+        // Start from the selected date
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(start);
+            d.setDate(start.getDate() + i);
+            dates.push(d);
+        }
+        setWeekDates(dates);
+    }, [selectedDate]);
+
+    // Fetch slots when date changes
+    useEffect(() => {
+        const fetchSlots = async () => {
+            setLoadingSlots(true);
+            setAvailableSlots([]);
+            setSelectedTime(null);
+
+            try {
+                // Fetch business hours
+                const { data: hours } = await supabase
+                    .from('business_hours')
+                    .select('*')
+                    .eq('company_id', appointment.company_id);
+
+                // Fetch existing appointments
+                const startDay = new Date(selectedDate);
+                startDay.setHours(0, 0, 0, 0);
+                const endDay = new Date(selectedDate);
+                endDay.setHours(23, 59, 59, 999);
+
+                const { data: existingApts } = await supabase
+                    .from('appointments')
+                    .select('start_time, end_time')
+                    .eq('company_id', appointment.company_id)
+                    .neq('status', 'cancelled')
+                    .neq('id', appointment.id) // Exclude current
+                    .gte('start_time', startDay.toISOString())
+                    .lte('start_time', endDay.toISOString());
+
+                // Simple slot calculation logic
+                const slotInterval = 30; // default
+
+                // Get open range for today
+                const dayOfWeek = selectedDate.getDay();
+                // business_hours day_of_week: Sun=0, Mon=1...
+                const todayHours = hours?.filter((h: any) => h.day_of_week === dayOfWeek && h.is_open);
+
+                if (!todayHours || todayHours.length === 0) {
+                    setAvailableSlots([]);
+                    setLoadingSlots(false);
+                    return;
+                }
+
+                // Generate all possible slots
+                const slots: string[] = [];
+                todayHours.forEach((shift: any) => {
+                    let current = new Date(selectedDate);
+                    const [sh, sm] = shift.start_time.split(':').map(Number);
+                    const [eh, em] = shift.end_time.split(':').map(Number);
+
+                    current.setHours(sh, sm, 0, 0);
+                    const endShift = new Date(selectedDate);
+                    endShift.setHours(eh, em, 0, 0);
+
+                    while (current < endShift) {
+                        // Check if slot overlaps with existing
+                        const slotEnd = new Date(current.getTime() + (appointment.service_duration || 30) * 60000);
+                        if (slotEnd > endShift) break;
+
+                        const isBlocked = existingApts?.some((apt: any) => {
+                            const aptStart = new Date(apt.start_time);
+                            const aptEnd = new Date(apt.end_time);
+                            // Simple overlap check
+                            return (current < aptEnd && slotEnd > aptStart);
+                        });
+
+                        // Check if in past
+                        if (current > new Date()) {
+                            if (!isBlocked) {
+                                slots.push(current.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+                            }
+                        }
+
+                        // Increment
+                        current = new Date(current.getTime() + slotInterval * 60000);
+                    }
+                });
+
+                setAvailableSlots(slots);
+            } catch (error) {
+                console.error("Error fetching slots", error);
+            } finally {
+                setLoadingSlots(false);
+            }
+        };
+
+        fetchSlots();
+    }, [selectedDate, appointment]);
+
+    const handleConfirmReschedule = async () => {
+        if (!selectedTime) return;
+        setIsSaving(true);
+        try {
+            const [h, m] = selectedTime.split(':').map(Number);
+            const newStart = new Date(selectedDate);
+            newStart.setHours(h, m, 0, 0);
+            const newEnd = new Date(newStart.getTime() + (appointment.service_duration || 30) * 60000);
+
+            const { error } = await supabase.rpc('client_reschedule_appointment', {
+                p_appointment_id: appointment.id,
+                p_new_start: newStart.toISOString(),
+                p_new_end: newEnd.toISOString(),
+                p_phone: clientPhone,
+                p_email: clientEmail
+            });
+
+            if (error) throw error;
+            alert('Reagendamento confirmado!');
+            onSuccess();
+        } catch (error) {
+            console.error(error);
+            alert('Erro ao reagendar.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const monthName = selectedDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-scale-in flex flex-col max-h-[90vh]">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
+                    <h2 className="text-lg font-bold text-slate-900">Remarcar {appointment.service_name}</h2>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full">
+                        <X className="w-5 h-5 text-slate-500" />
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 md:p-6">
+                    {/* Month Selector */}
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-base font-semibold text-slate-900 capitalize">{monthName}</h3>
+                        <div className="flex gap-1">
+                            <button className="p-1 hover:bg-slate-100 rounded" onClick={() => {
+                                const d = new Date(selectedDate);
+                                d.setDate(d.getDate() - 7);
+                                setSelectedDate(d);
+                            }}><ChevronLeft className="w-4 h-4" /></button>
+                            <button className="p-1 hover:bg-slate-100 rounded" onClick={() => {
+                                const d = new Date(selectedDate);
+                                d.setDate(d.getDate() + 7);
+                                setSelectedDate(d);
+                            }}><ChevronRight className="w-4 h-4" /></button>
                         </div>
                     </div>
-                </main>
+
+                    {/* Horizontal Days */}
+                    <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+                        {weekDates.map(date => {
+                            const isSelected = date.toDateString() === selectedDate.toDateString();
+                            return (
+                                <button
+                                    key={date.toISOString()}
+                                    onClick={() => setSelectedDate(date)}
+                                    className={`flex flex-col items-center justify-center min-w-[3.5rem] h-16 rounded-xl border transition-all ${isSelected
+                                        ? 'bg-blue-50 border-blue-500 text-blue-700 ring-1 ring-blue-500'
+                                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                                        }`}
+                                >
+                                    <span className="text-xs font-medium uppercase opacity-80">{date.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}</span>
+                                    <span className="text-lg font-bold">{date.getDate()}</span>
+                                </button>
+                            )
+                        })}
+                    </div>
+
+                    {/* Time Slots */}
+                    <div>
+                        <h4 className="text-sm font-medium text-slate-500 mb-3 block text-left">Escolha um horário</h4>
+                        {loadingSlots ? (
+                            <div className="flex justify-center py-8">
+                                <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                            </div>
+                        ) : availableSlots.length === 0 ? (
+                            <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                Nenhum horário disponível nesta data.
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-2">
+                                {availableSlots.map(time => (
+                                    <button
+                                        key={time}
+                                        onClick={() => setSelectedTime(time)}
+                                        className={`py-3 px-4 rounded-lg border text-sm font-medium transition-all w-full text-center ${selectedTime === time
+                                            ? 'bg-blue-50 border-blue-500 text-blue-700 ring-1 ring-blue-500'
+                                            : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300 hover:bg-slate-50'
+                                            }`}
+                                    >
+                                        {time}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="p-4 border-t border-slate-100 bg-white z-10">
+                    <button
+                        onClick={handleConfirmReschedule}
+                        disabled={!selectedTime || isSaving}
+                        className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isSaving ? 'Confirmando...' : 'Confirmar remarcação'}
+                    </button>
+                </div>
             </div>
         </div>
     );

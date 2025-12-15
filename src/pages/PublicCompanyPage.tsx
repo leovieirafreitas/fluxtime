@@ -316,46 +316,6 @@ export default function PublicCompanyPage() {
 
         setSubmittingReview(true);
         try {
-            // Verificar se o cliente está logado e tem agendamentos
-            if (!isClientLoggedIn || !clientPhone) {
-                alert('Você precisa estar logado como cliente para deixar uma avaliação.');
-                setSubmittingReview(false);
-                return;
-            }
-
-            // Verificar se o cliente tem pelo menos um agendamento nesta empresa
-            const { data: appointments, error: appointmentsError } = await supabase
-                .from('appointments')
-                .select('id')
-                .eq('company_id', company.id)
-                .eq('client_phone', clientPhone)
-                .limit(1);
-
-            if (appointmentsError) throw appointmentsError;
-
-            if (!appointments || appointments.length === 0) {
-                alert('Apenas clientes que já realizaram agendamentos podem deixar avaliações.');
-                setSubmittingReview(false);
-                return;
-            }
-
-            // Verificar se o cliente já deixou uma avaliação
-            const { data: existingReview, error: reviewCheckError } = await supabase
-                .from('reviews')
-                .select('id')
-                .eq('company_id', company.id)
-                .eq('client_name', reviewName.trim())
-                .limit(1);
-
-            if (reviewCheckError) throw reviewCheckError;
-
-            if (existingReview && existingReview.length > 0) {
-                alert('Você já deixou uma avaliação para esta empresa.');
-                setSubmittingReview(false);
-                return;
-            }
-
-            // Inserir a avaliação
             const { error } = await supabase
                 .from('reviews')
                 .insert({
@@ -1078,24 +1038,7 @@ export default function PublicCompanyPage() {
                                     {/* Review Form */}
                                     <div className="bg-white rounded-xl p-6 border border-slate-200 mb-6">
                                         <h3 className="font-bold text-slate-900 mb-4">Deixe sua avaliação</h3>
-                                        {!isClientLoggedIn ? (
-                                            <div className="text-center py-8">
-                                                <Star className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-                                                <p className="text-lg font-medium text-slate-900 mb-2">
-                                                    Faça login para avaliar
-                                                </p>
-                                                <p className="text-sm text-slate-600 mb-4">
-                                                    Apenas clientes que já realizaram agendamentos podem deixar avaliações.
-                                                </p>
-                                                <a
-                                                    href="#client-access"
-                                                    className="inline-block px-6 py-3 rounded-lg font-semibold transition-colors"
-                                                    style={{ backgroundColor: accentColor, color: 'white' }}
-                                                >
-                                                    Acessar área do cliente
-                                                </a>
-                                            </div>
-                                        ) : reviewSubmitted ? (
+                                        {reviewSubmitted ? (
                                             <div className="text-center py-8">
                                                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                                     <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

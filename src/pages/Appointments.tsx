@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
+import NewAppointmentSlideOver from '../components/NewAppointmentSlideOver';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
@@ -11,7 +12,12 @@ import {
     Plus,
     Minus,
     Settings,
-    ChevronDown
+    ChevronDown,
+    X,
+    Calendar as CalendarIcon,
+    Clock,
+    User,
+    Briefcase
 } from 'lucide-react';
 
 export default function Appointments() {
@@ -31,6 +37,19 @@ export default function Appointments() {
     // New states for Rules and Appointments
     const [schedulingRules, setSchedulingRules] = useState<any>(null);
     const [appointments, setAppointments] = useState<any[]>([]);
+
+    // Slide-over state
+    const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
+
+    // Form states
+    const [clients, setClients] = useState<any[]>([]);
+    const [services, setServices] = useState<any[]>([]);
+    const [selectedService, setSelectedService] = useState<any>(null);
+    const [selectedClient, setSelectedClient] = useState('');
+    const [appointmentDate, setAppointmentDate] = useState('');
+    const [appointmentTime, setAppointmentTime] = useState('');
+    const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent');
+    const [discountValue, setDiscountValue] = useState(0);
 
     const hours = Array.from({ length: 24 }, (_, i) => i);
 
@@ -84,6 +103,70 @@ export default function Appointments() {
             console.error('Error fetching rules:', error);
         }
     };
+
+    const fetchClients = async () => {
+        try {
+            const { data } = await supabase
+                .from('clients')
+                .select('id, name, phone, email')
+                .eq('company_id', profile?.company_id)
+                .order('name');
+
+            if (data) {
+                setClients(data);
+            }
+        } catch (error) {
+            console.error('Error fetching clients:', error);
+        }
+    };
+
+    const fetchServices = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('services')
+                .select('id, name, duration_minutes, price')
+                .eq('company_id', profile?.company_id)
+                .order('name');
+
+            if (error) {
+                console.error('Error fetching services:', error);
+                return;
+            }
+
+            console.log('Services fetched:', data);
+            if (data) {
+                setServices(data);
+            }
+        } catch (error) {
+            console.error('Error fetching services:', error);
+        }
+    };
+
+    // Fetch clients and services when slide-over opens
+    useEffect(() => {
+        if (isNewAppointmentOpen && profile?.company_id) {
+            fetchClients();
+            fetchServices();
+        }
+    }, [isNewAppointmentOpen, profile?.company_id]);
+
+    // Calculate totals
+    const calculateTotals = () => {
+        const subtotal = selectedService?.price || 0;
+        let discount = 0;
+
+        if (discountType === 'percent') {
+            discount = (subtotal * discountValue) / 100;
+        } else {
+            discount = discountValue;
+        }
+
+        const total = Math.max(0, subtotal - discount);
+
+        return { subtotal, discount, total };
+    };
+
+    const { subtotal, discount, total } = calculateTotals();
 
     const fetchAppointments = async () => {
         try {
@@ -362,9 +445,12 @@ export default function Appointments() {
                     </div>
 
                     <div className="flex items-center gap-4">
-                        <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-sm">
+                        <button
+                            onClick={() => setIsNewAppointmentOpen(true)}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-sm"
+                        >
                             <Plus className="w-4 h-4" />
-                            Novo evento
+                            Novo agendamento
                         </button>
                     </div>
                 </header>
@@ -564,32 +650,66 @@ export default function Appointments() {
                                                     style={!isOpen && showBusinessHours ? { backgroundImage: 'linear-gradient(45deg, rgba(0,0,0,0.04) 25%, transparent 25%, transparent 50%, rgba(0,0,0,0.04) 50%, rgba(0,0,0,0.04) 75%, transparent 75%, transparent)', backgroundSize: '12px 12px' } : {}}
                                                 >
                                                     {/* Render Appointments */}
-                                                    {cellAppointments.map(apt => {
+                                                    {cellAppointments.map((apt, index) => {
                                                         const startMinutes = apt.start_date.getMinutes();
                                                         const duration = (apt.end_date.getTime() - apt.start_date.getTime()) / 60000;
                                                         const topPct = (startMinutes / 60) * 100;
                                                         const heightPct = (duration / 60) * 100;
 
+                                                        // Simple overlap handling: divide width by number of concurrent apps in this hour-start slot
+                                                        const widthPct = 100 / cellAppointments.length;
+                                                        const leftPct = widthPct * index;
+
+                                                        // Get Status Colors
+                                                        const getStatusColor = (status: string) => {
+                                                            switch (status) {
+                                                                case 'confirmed':
+                                                                    return 'bg-green-100 border-green-200 text-green-700 dark:bg-green-900/50 dark:border-green-800 dark:text-green-100';
+                                                                case 'pending':
+                                                                    return 'bg-yellow-100 border-yellow-200 text-yellow-700 dark:bg-yellow-900/50 dark:border-yellow-800 dark:text-yellow-100';
+                                                                case 'cancelled':
+                                                                    return 'bg-red-100 border-red-200 text-red-700 dark:bg-red-900/50 dark:border-red-800 dark:text-red-100 opacity-75';
+                                                                default:
+                                                                    return 'bg-blue-100 border-blue-200 text-blue-700 dark:bg-blue-900/50 dark:border-blue-800 dark:text-blue-100';
+                                                            }
+                                                        };
+
                                                         return (
                                                             <div
                                                                 key={apt.id}
-                                                                className="absolute left-0.5 right-0.5 rounded text-xs border bg-blue-100 border-blue-200 text-blue-700 dark:bg-blue-900/50 dark:border-blue-800 dark:text-blue-100 z-10 shadow-sm group cursor-pointer"
+                                                                className={`absolute rounded text-xs border z-10 shadow-sm group cursor-pointer hover:z-50 ${getStatusColor(apt.status)}`}
                                                                 style={{
                                                                     top: `${topPct}%`,
                                                                     height: `${heightPct}%`,
-                                                                    minHeight: '26px'
+                                                                    minHeight: '26px',
+                                                                    width: `${widthPct}%`,
+                                                                    left: `${leftPct}%`
                                                                 }}
                                                             >
                                                                 {/* Default View (Clipped) */}
                                                                 <div className="relative w-full h-full px-2 py-1 overflow-hidden">
                                                                     <div className="font-semibold truncate leading-tight">{apt.client_name}</div>
-                                                                    <div className="truncate opacity-75 text-[10px] leading-tight">{apt.service?.name}</div>
+                                                                    <div className="truncate opacity-75 text-[10px] leading-tight flex items-center gap-1">
+                                                                        {apt.status === 'pending' && <span className="font-bold">⚠</span>}
+                                                                        {apt.service?.name}
+                                                                    </div>
                                                                 </div>
 
                                                                 {/* Hover Details Card */}
                                                                 <div className={`hidden group-hover:block absolute left-0 top-0 w-[200px] z-50 rounded-lg shadow-xl border p-3 min-h-full ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
                                                                     <div className="flex flex-col gap-2">
                                                                         <div>
+                                                                            <div className="flex items-center justify-between mb-1">
+                                                                                <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm ${apt.status === 'confirmed' ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' :
+                                                                                    apt.status === 'pending' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300' :
+                                                                                        apt.status === 'cancelled' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' :
+                                                                                            'bg-slate-100 text-slate-600'
+                                                                                    }`}>
+                                                                                    {apt.status === 'confirmed' ? 'Confirmado' :
+                                                                                        apt.status === 'pending' ? 'Pendente' :
+                                                                                            apt.status === 'cancelled' ? 'Cancelado' : apt.status}
+                                                                                </span>
+                                                                            </div>
                                                                             <span className={`font-bold block ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{apt.client_name}</span>
                                                                             <span className={`text-xs block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>{apt.service?.name}</span>
                                                                         </div>
@@ -680,7 +800,11 @@ export default function Appointments() {
                                             {/* Indicators for appointments */}
                                             <div className="flex flex-col gap-1 mt-1">
                                                 {dayAppointments.slice(0, 3).map(apt => (
-                                                    <div key={apt.id} className="text-[10px] truncate px-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                                                    <div key={apt.id} className={`text-[10px] truncate px-1 rounded ${apt.status === 'confirmed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                                                            apt.status === 'pending' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                                                                apt.status === 'cancelled' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
+                                                                    'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                                                        }`}>
                                                         {apt.start_date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} {apt.client_name}
                                                     </div>
                                                 ))}
@@ -697,7 +821,87 @@ export default function Appointments() {
                         </div>
                     )}
                 </div>
+
+                {/* Slide-over - Novo Agendamento */}
+                <NewAppointmentSlideOver
+                    isOpen={isNewAppointmentOpen}
+                    onClose={() => setIsNewAppointmentOpen(false)}
+                    clients={clients}
+                    services={services}
+                    selectedService={selectedService}
+                    setSelectedService={setSelectedService}
+                    selectedClient={selectedClient}
+                    setSelectedClient={setSelectedClient}
+                    appointmentDate={appointmentDate}
+                    setAppointmentDate={setAppointmentDate}
+                    appointmentTime={appointmentTime}
+                    setAppointmentTime={setAppointmentTime}
+                    discountType={discountType}
+                    setDiscountType={setDiscountType}
+                    discountValue={discountValue}
+                    setDiscountValue={setDiscountValue}
+                    subtotal={subtotal}
+                    discount={discount}
+                    total={total}
+                    userFullName={profile?.full_name || 'Usuário'}
+                    onSubmit={async ({ notes }) => {
+                        if (!selectedClient || !selectedService || !appointmentDate || !appointmentTime || !profile?.company_id) {
+                            alert('Por favor, preencha todos os campos obrigatórios.');
+                            return;
+                        }
+
+                        // Create Timestamp
+                        const startDateTime = new Date(`${appointmentDate}T${appointmentTime}:00`);
+                        const duration = selectedService.duration_minutes || 30;
+                        const endDateTime = new Date(startDateTime.getTime() + duration * 60000);
+
+                        // Find client details
+                        const clientObj = clients.find(c => c.id === selectedClient);
+                        const clientName = clientObj?.name || 'Cliente';
+                        const clientPhone = clientObj?.phone || null;
+                        const clientEmail = clientObj?.email || null;
+
+                        // Determine initial status based on rules
+                        const initialStatus = schedulingRules?.confirmation_required === true ? 'pending' : 'confirmed';
+
+                        const { error } = await supabase
+                            .from('appointments')
+                            .insert({
+                                company_id: profile.company_id,
+                                client_id: selectedClient,
+                                client_name: clientName,
+                                client_phone: clientPhone,
+                                client_email: clientEmail,
+                                service_id: selectedService.id,
+                                professional_id: profile.id, // Current user as professional for now
+                                start_time: startDateTime.toISOString(),
+                                end_time: endDateTime.toISOString(),
+                                status: initialStatus,
+                                notes: notes,
+                                total_amount: total,
+                                discount_amount: discount,
+                                discount_type: discountType
+                                // appointment_name: name // If column exists, otherwise ignore
+                            });
+
+                        if (error) {
+                            console.error('Error creating appointment:', error);
+                            alert(`Erro ao criar agendamento: ${error.message || JSON.stringify(error)}`);
+                        } else {
+                            // Success
+                            setIsNewAppointmentOpen(false);
+                            fetchAppointments(); // Refresh list
+
+                            // Reset form (optional, simplified)
+                            setSelectedClient('');
+                            setSelectedService(null);
+                            setAppointmentTime('');
+                        }
+                    }}
+                />
+
             </div >
         </div >
     );
 }
+
