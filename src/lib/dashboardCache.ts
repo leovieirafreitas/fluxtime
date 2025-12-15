@@ -10,6 +10,7 @@ export interface UpcomingAppointment {
     client_name: string;
     service: { name: string; price: number };
     start_time: string;
+    total_amount?: number; // Added field
     status: 'confirmed' | 'pending' | 'cancelled';
 }
 

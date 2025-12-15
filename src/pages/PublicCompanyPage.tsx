@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { whatsappService } from '../services/whatsapp';
-import { MapPin, Clock, Star, Instagram, Facebook, Globe, BookOpen, MessageCircle } from 'lucide-react';
+import { MapPin, Clock, X, Star, Instagram, Facebook, Globe, MessageCircle, BookOpen, Tag } from 'lucide-react';
 import DatePicker from '../components/DatePicker';
 import OTPInput from '../components/OTPInput';
 
@@ -77,7 +77,6 @@ export default function PublicCompanyPage() {
     const [categories, setCategories] = useState<Category[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [businessHours, setBusinessHours] = useState<BusinessHour[]>([]);
-    const [loading, setLoading] = useState(true);
     const [schedulingWindowDays, setSchedulingWindowDays] = useState<number>(90); // Default 90 days
     const [slotIntervalMinutes, setSlotIntervalMinutes] = useState<number>(30); // Default 30 min
 
@@ -133,6 +132,14 @@ export default function PublicCompanyPage() {
     const [reviews, setReviews] = useState<any[]>([]);
     const [reviewRating, setReviewRating] = useState(0);
     const [reviewHoverRating, setReviewHoverRating] = useState(0);
+
+    // Coupon
+    const [couponCode, setCouponCode] = useState('');
+    const [appliedCoupon, setAppliedCoupon] = useState<{ code: string, discount: number, type: 'percent' | 'fixed' } | null>(null);
+    const [validatingCoupon, setValidatingCoupon] = useState(false);
+
+    // Initial load handling
+    const [loading, setLoading] = useState(true);
     const [reviewName, setReviewName] = useState('');
     const [reviewComment, setReviewComment] = useState('');
     const [submittingReview, setSubmittingReview] = useState(false);
@@ -445,7 +452,8 @@ export default function PublicCompanyPage() {
                 p_client_name: clientName,
                 p_client_phone: normalizedPhone,
                 p_client_email: clientEmail,
-                p_notes: clientObs
+                p_notes: clientObs,
+                p_coupon_code: appliedCoupon ? appliedCoupon.code : null
             });
 
             if (error) throw error;
@@ -616,6 +624,51 @@ export default function PublicCompanyPage() {
             console.error("Error finalizing:", error);
             alert(`Erro ao finalizar: ${error.message || JSON.stringify(error)}`);
             setIsSubmitting(false);
+        }
+    };
+
+    const handleApplyCoupon = async () => {
+        if (!couponCode.trim() || !company) return;
+        setValidatingCoupon(true);
+        try {
+            const { data, error } = await supabase
+                .from('coupons')
+                .select('*')
+                .eq('company_id', company.id)
+                .eq('code', couponCode.toUpperCase())
+                .eq('active', true)
+                .maybeSingle();
+
+            if (error) throw error;
+
+            if (!data) {
+                alert('Cupom inválido ou não encontrado.');
+                setAppliedCoupon(null);
+                return;
+            }
+
+            if (data.expiration_date && new Date(data.expiration_date) < new Date()) {
+                alert('Cupom expirado.');
+                setAppliedCoupon(null);
+                return;
+            }
+            if (data.max_uses && data.used_count >= data.max_uses) {
+                alert('Limite de uso atingido para este cupom.');
+                setAppliedCoupon(null);
+                return;
+            }
+
+            setAppliedCoupon({
+                code: data.code,
+                discount: data.discount_value,
+                type: data.discount_type as 'percent' | 'fixed'
+            });
+
+        } catch (error) {
+            console.error(error);
+            alert('Erro ao validar cupom.');
+        } finally {
+            setValidatingCoupon(false);
         }
     };
 
@@ -1460,6 +1513,46 @@ export default function PublicCompanyPage() {
                                             />
                                         </div>
 
+                                        <div className="mt-4 pt-4 border-t border-slate-100">
+                                            {!appliedCoupon ? (
+                                                <div className="flex gap-2">
+                                                    <div className="relative flex-1">
+                                                        <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                        <input
+                                                            type="text"
+                                                            value={couponCode}
+                                                            onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                                                            placeholder="Código do cupom"
+                                                            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 uppercase text-sm"
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        onClick={handleApplyCoupon}
+                                                        disabled={!couponCode || validatingCoupon}
+                                                        className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50"
+                                                    >
+                                                        {validatingCoupon ? '...' : 'Aplicar'}
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center justify-between bg-green-50 border border-green-100 p-3 rounded-lg">
+                                                    <div className="flex items-center gap-2">
+                                                        <Tag className="w-4 h-4 text-green-600" />
+                                                        <span className="font-bold text-green-700 text-sm">{appliedCoupon.code}</span>
+                                                        <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                                                            -{appliedCoupon.type === 'percent' ? `${appliedCoupon.discount}%` : `R$ ${appliedCoupon.discount}`}
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => { setAppliedCoupon(null); setCouponCode(''); }}
+                                                        className="text-slate-400 hover:text-red-500"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+
                                         <button
                                             onClick={isClientLoggedIn ? async () => {
                                                 setIsSubmitting(true);
@@ -1751,8 +1844,33 @@ export default function PublicCompanyPage() {
                                         <div className="pt-6 border-t border-slate-100 mt-6">
                                             <div className="flex justify-between items-end">
                                                 <div className="text-sm text-slate-500">Total estimado</div>
-                                                <div className="text-xl font-bold text-slate-900">{formatPrice(selectedService.price)}</div>
+                                                <div className="text-right">
+                                                    {appliedCoupon && (
+                                                        <div className="text-sm text-slate-400 line-through mb-0.5">
+                                                            {formatPrice(selectedService.price)}
+                                                        </div>
+                                                    )}
+                                                    <div className={`text-xl font-bold ${appliedCoupon ? 'text-green-600' : 'text-slate-900'}`}>
+                                                        {(() => {
+                                                            let finalPrice = selectedService.price;
+                                                            if (appliedCoupon) {
+                                                                if (appliedCoupon.type === 'percent') {
+                                                                    finalPrice = finalPrice * (1 - appliedCoupon.discount / 100);
+                                                                } else {
+                                                                    finalPrice = Math.max(0, finalPrice - appliedCoupon.discount);
+                                                                }
+                                                            }
+                                                            return formatPrice(finalPrice);
+                                                        })()}
+                                                    </div>
+                                                </div>
                                             </div>
+                                            {appliedCoupon && (
+                                                <div className="mt-2 text-xs text-green-600 bg-green-50 p-2 rounded flex items-center gap-1">
+                                                    <Tag className="w-3 h-3" />
+                                                    Cupom <b>{appliedCoupon.code}</b> aplicado
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>

@@ -21,17 +21,20 @@ import ClientLogin from './pages/ClientLogin';
 import ClientDashboard from './pages/ClientDashboard';
 import Reviews from './pages/Reviews';
 import Links from './pages/Links';
+import ClientDetails from './pages/ClientDetails';
 import { UserProfileProvider } from './contexts/UserProfileContext';
 
 
+import Coupons from './pages/Coupons';
+
 function App() {
   const [session, setSession] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setLoading(false);
+      setIsLoading(false);
     });
 
     const {
@@ -43,10 +46,10 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-dark-950 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     );
   }
@@ -119,6 +122,10 @@ function App() {
             element={session ? <Services /> : <Navigate to="/login" />}
           />
           <Route
+            path="/catalog/coupons"
+            element={session ? <Coupons /> : <Navigate to="/login" />}
+          />
+          <Route
             path="/catalog/combos"
             element={session ? <ServiceCategories /> : <Navigate to="/login" />}
           />
@@ -133,6 +140,10 @@ function App() {
           <Route
             path="/"
             element={<Navigate to={session ? "/dashboard" : "/login"} />}
+          />
+          <Route
+            path="/clients/:id"
+            element={session ? <ClientDetails /> : <Navigate to="/login" />}
           />
         </Routes>
       </UserProfileProvider>

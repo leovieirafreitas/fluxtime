@@ -59,6 +59,8 @@ export default function ClientDashboard() {
     const [clientEmail, setClientEmail] = useState('');
     const [appointments, setAppointments] = useState<AppointmentType[]>([]);
     const [myCompanies, setMyCompanies] = useState<any[]>([]);
+    const [filteredCompanies, setFilteredCompanies] = useState<any[]>([]);
+    const [searchTerm, setSearchTerm] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [filter, setFilter] = useState<'future' | 'past'>('future');
@@ -99,6 +101,7 @@ export default function ClientDashboard() {
 
                 setAppointments(aptData || []);
                 setMyCompanies(companiesData || []);
+                setFilteredCompanies(companiesData || []);
 
             } catch (error) {
                 console.error('Error fetching dashboard data:', error);
@@ -109,6 +112,18 @@ export default function ClientDashboard() {
 
         fetchDashboardData();
     }, [navigate]);
+
+    // Instant filter for companies
+    useEffect(() => {
+        if (!searchTerm.trim()) {
+            setFilteredCompanies(myCompanies);
+        } else {
+            const lower = searchTerm.toLowerCase();
+            setFilteredCompanies(myCompanies.filter(c =>
+                c.name.toLowerCase().includes(lower)
+            ));
+        }
+    }, [searchTerm, myCompanies]);
 
     const handleLogout = () => {
         localStorage.removeItem('client_session');
@@ -143,9 +158,9 @@ export default function ClientDashboard() {
             ));
             setSelectedAppointment(null); // Close modal
             alert('Agendamento desmarcado com sucesso.');
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error canceling:', err);
-            alert('Erro ao cancelar agendamento.');
+            alert(`Erro ao cancelar agendamento: ${err.message || JSON.stringify(err)}`);
         }
     };
 
@@ -169,9 +184,9 @@ export default function ClientDashboard() {
             // Close modal or update selected appointment
             setSelectedAppointment(prev => prev ? { ...prev, status: 'confirmed' } : null);
             alert('Agendamento confirmado com sucesso!');
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error confirming:', err);
-            alert('Erro ao confirmar agendamento.');
+            alert(`Erro ao confirmar agendamento: ${err.message || JSON.stringify(err)}`);
         }
     };
 
@@ -258,13 +273,15 @@ export default function ClientDashboard() {
                             <input
                                 type="text"
                                 placeholder="Buscar negócios..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 transition-colors"
                             />
                         </div>
                         <p className="text-xs text-slate-500 px-1">Clique na foto de um negócio para filtrar</p>
 
                         <div className="space-y-2">
-                            {myCompanies.map(comp => (
+                            {filteredCompanies.map(comp => (
                                 <button key={comp.id} onClick={() => navigate(`/${comp.slug}`)} className="flex items-center justify-between w-full p-2 rounded-lg hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-100 transition-all text-left group">
                                     <div className="flex items-center gap-3 overflow-hidden">
                                         {comp.logo_url ? <img src={comp.logo_url} className="w-8 h-8 rounded-lg object-cover bg-white" /> : <div className="w-8 h-8 rounded-lg bg-slate-200" />}
@@ -551,6 +568,21 @@ function RescheduleModal({ appointment, onClose, onSuccess, clientPhone, clientE
     const [loadingSlots, setLoadingSlots] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
+    const [schedulingRules, setSchedulingRules] = useState<any>(null);
+
+    // Fetch rules on mount
+    useEffect(() => {
+        const fetchRules = async () => {
+            const { data } = await supabase
+                .from('company_scheduling_rules')
+                .select('*')
+                .eq('company_id', appointment.company_id)
+                .single();
+            if (data) setSchedulingRules(data);
+        };
+        fetchRules();
+    }, [appointment.company_id]);
+
     // Update week dates when selectedDate changes
     useEffect(() => {
         const dates = [];
@@ -578,6 +610,13 @@ function RescheduleModal({ appointment, onClose, onSuccess, clientPhone, clientE
                     .select('*')
                     .eq('company_id', appointment.company_id);
 
+                // Use rules from state or fetch if missing (though state should have it)
+                const rules = schedulingRules || {};
+                const gapBefore = rules.gap_before_minutes || 0;
+                const gapAfter = rules.gap_after_minutes || 0;
+                const minNotice = rules.min_notice_minutes || 0;
+                const slotInterval = rules.slot_interval_minutes || 30;
+
                 // Fetch existing appointments
                 const startDay = new Date(selectedDate);
                 startDay.setHours(0, 0, 0, 0);
@@ -593,9 +632,6 @@ function RescheduleModal({ appointment, onClose, onSuccess, clientPhone, clientE
                     .gte('start_time', startDay.toISOString())
                     .lte('start_time', endDay.toISOString());
 
-                // Simple slot calculation logic
-                const slotInterval = 30; // default
-
                 // Get open range for today
                 const dayOfWeek = selectedDate.getDay();
                 // business_hours day_of_week: Sun=0, Mon=1...
@@ -609,6 +645,9 @@ function RescheduleModal({ appointment, onClose, onSuccess, clientPhone, clientE
 
                 // Generate all possible slots
                 const slots: string[] = [];
+                const now = new Date();
+                const minTime = new Date(now.getTime() + minNotice * 60000);
+
                 todayHours.forEach((shift: any) => {
                     let current = new Date(selectedDate);
                     const [sh, sm] = shift.start_time.split(':').map(Number);
@@ -619,19 +658,36 @@ function RescheduleModal({ appointment, onClose, onSuccess, clientPhone, clientE
                     endShift.setHours(eh, em, 0, 0);
 
                     while (current < endShift) {
-                        // Check if slot overlaps with existing
-                        const slotEnd = new Date(current.getTime() + (appointment.service_duration || 30) * 60000);
+                        // Check if slot starts after min notice
+                        if (current < minTime) {
+                            current = new Date(current.getTime() + slotInterval * 60000);
+                            continue;
+                        }
+
+                        // Calculate slot end
+                        const duration = appointment.service_duration || 30;
+                        const slotEnd = new Date(current.getTime() + duration * 60000);
+
                         if (slotEnd > endShift) break;
+
+                        // Check overlap with gaps
+                        // Proposed appointment with gaps: [start - gapBefore, end + gapAfter]
+                        const proposedStart = new Date(current.getTime() - gapBefore * 60000);
+                        const proposedEnd = new Date(slotEnd.getTime() + gapAfter * 60000);
 
                         const isBlocked = existingApts?.some((apt: any) => {
                             const aptStart = new Date(apt.start_time);
                             const aptEnd = new Date(apt.end_time);
-                            // Simple overlap check
-                            return (current < aptEnd && slotEnd > aptStart);
+
+                            // Existing apt effective range (assuming existing apts also have gaps, usually we just check if our buffered slot touches their raw time)
+                            // Ideally we should check if our P (proposed) overlaps with E (existing).
+                            // Overlap condition: P_start < E_end && P_end > E_start
+
+                            return (proposedStart < aptEnd && proposedEnd > aptStart);
                         });
 
-                        // Check if in past
-                        if (current > new Date()) {
+                        // Check if in past (already covered by minTime, but safe to keep)
+                        if (current > now) {
                             if (!isBlocked) {
                                 slots.push(current.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
                             }
@@ -651,7 +707,7 @@ function RescheduleModal({ appointment, onClose, onSuccess, clientPhone, clientE
         };
 
         fetchSlots();
-    }, [selectedDate, appointment]);
+    }, [selectedDate, appointment, schedulingRules]);
 
     const handleConfirmReschedule = async () => {
         if (!selectedTime) return;
@@ -698,16 +754,52 @@ function RescheduleModal({ appointment, onClose, onSuccess, clientPhone, clientE
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-base font-semibold text-slate-900 capitalize">{monthName}</h3>
                         <div className="flex gap-1">
-                            <button className="p-1 hover:bg-slate-100 rounded" onClick={() => {
-                                const d = new Date(selectedDate);
-                                d.setDate(d.getDate() - 7);
-                                setSelectedDate(d);
-                            }}><ChevronLeft className="w-4 h-4" /></button>
-                            <button className="p-1 hover:bg-slate-100 rounded" onClick={() => {
-                                const d = new Date(selectedDate);
-                                d.setDate(d.getDate() + 7);
-                                setSelectedDate(d);
-                            }}><ChevronRight className="w-4 h-4" /></button>
+                            <button
+                                className="p-1 hover:bg-slate-100 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                                disabled={(() => {
+                                    const d = new Date(selectedDate);
+                                    d.setDate(d.getDate() - 7);
+                                    // Check if last day of prev week is past today
+                                    // Actually we just want to prevent going too far back into the past
+                                    // Simplest: prevent if prev week start is earlier than today?
+                                    // Let's just check if current selectedDate is close to today
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    // If selectedDate is strictly greater than today, we can probably go back
+                                    // But let's prevent going back if we are already at "today" week
+                                    return selectedDate <= today;
+                                })()}
+                                onClick={() => {
+                                    const d = new Date(selectedDate);
+                                    d.setDate(d.getDate() - 7);
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    if (d < today) d.setTime(today.getTime());
+                                    setSelectedDate(d);
+                                }}
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <button
+                                className="p-1 hover:bg-slate-100 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                                disabled={(() => {
+                                    if (!schedulingRules?.scheduling_window_days) return false;
+                                    const maxDate = new Date();
+                                    maxDate.setDate(maxDate.getDate() + schedulingRules.scheduling_window_days);
+
+                                    // If next week start is beyond maxDate
+                                    const nextWeek = new Date(selectedDate);
+                                    nextWeek.setDate(nextWeek.getDate() + 7);
+                                    return nextWeek >= maxDate;
+                                })()}
+                                onClick={() => {
+                                    const d = new Date(selectedDate);
+                                    d.setDate(d.getDate() + 7);
+                                    setSelectedDate(d);
+                                }}
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
                         </div>
                     </div>
 
@@ -715,13 +807,31 @@ function RescheduleModal({ appointment, onClose, onSuccess, clientPhone, clientE
                     <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
                         {weekDates.map(date => {
                             const isSelected = date.toDateString() === selectedDate.toDateString();
+
+                            // Calculate limits
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+
+                            let maxDate = null;
+                            if (schedulingRules?.scheduling_window_days) {
+                                maxDate = new Date();
+                                maxDate.setHours(0, 0, 0, 0);
+                                maxDate.setDate(maxDate.getDate() + schedulingRules.scheduling_window_days);
+                            }
+
+                            const isPast = date < today;
+                            const isTooFar = maxDate ? date >= maxDate : false;
+                            const isDisabled = isPast || isTooFar;
+
                             return (
                                 <button
                                     key={date.toISOString()}
+                                    disabled={isDisabled}
                                     onClick={() => setSelectedDate(date)}
-                                    className={`flex flex-col items-center justify-center min-w-[3.5rem] h-16 rounded-xl border transition-all ${isSelected
-                                        ? 'bg-blue-50 border-blue-500 text-blue-700 ring-1 ring-blue-500'
-                                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                                    className={`flex flex-col items-center justify-center min-w-[3.5rem] h-16 rounded-xl border transition-all 
+                                        ${isDisabled ? 'opacity-40 cursor-not-allowed bg-slate-50 border-slate-100 text-slate-400' :
+                                            isSelected ? 'bg-blue-50 border-blue-500 text-blue-700 ring-1 ring-blue-500' :
+                                                'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                                         }`}
                                 >
                                     <span className="text-xs font-medium uppercase opacity-80">{date.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}</span>

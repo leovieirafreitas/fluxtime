@@ -1,7 +1,7 @@
-
 import { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import NewAppointmentSlideOver from '../components/NewAppointmentSlideOver';
+import AppointmentDetailsSlideOver from '../components/AppointmentDetailsSlideOver';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
@@ -12,12 +12,7 @@ import {
     Plus,
     Minus,
     Settings,
-    ChevronDown,
-    X,
-    Calendar as CalendarIcon,
-    Clock,
-    User,
-    Briefcase
+    ChevronDown
 } from 'lucide-react';
 
 export default function Appointments() {
@@ -26,7 +21,7 @@ export default function Appointments() {
     const [zoomLevel, setZoomLevel] = useState(100);
     const [showBusinessHours, setShowBusinessHours] = useState(true);
     const [splitCollaborators, setSplitCollaborators] = useState(true);
-    const [showSettings, setShowSettings] = useState(true);
+    const [showSettings, setShowSettings] = useState(false);
     const [numDays, setNumDays] = useState(7);
     const [businessHours, setBusinessHours] = useState<any[]>([]);
     const [companyTimezone, setCompanyTimezone] = useState('America/Sao_Paulo'); // Default fallback
@@ -37,6 +32,10 @@ export default function Appointments() {
     // New states for Rules and Appointments
     const [schedulingRules, setSchedulingRules] = useState<any>(null);
     const [appointments, setAppointments] = useState<any[]>([]);
+
+    // Details SlideOver
+    const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
+    const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
     // Slide-over state
     const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
@@ -60,6 +59,12 @@ export default function Appointments() {
             fetchAppointments();
         }
     }, [profile, currentDate, viewMode, numDays]); // Re-fetch appointments when date changes
+
+    const handleAppointmentClick = (apt: any, e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent triggering slot click
+        setSelectedAppointment(apt);
+        setIsDetailsOpen(true);
+    };
 
     const fetchCompanySettings = async () => {
         try {
@@ -87,7 +92,6 @@ export default function Appointments() {
             console.error('Error fetching settings:', error);
         }
     };
-
     const fetchSchedulingRules = async () => {
         try {
             const { data } = await supabase
@@ -214,10 +218,17 @@ export default function Appointments() {
                     start_time,
                     end_time,
                     client_name,
+                    client_phone,
+                    client_email,
                     status,
                     notes,
-                    service:services(name, duration_minutes, price),
-                    professional:profiles(full_name)
+                    payment_status,
+                    origin,
+                    total_amount,
+                    coupon_id,
+                    coupon:coupons(code, discount_type, discount_value),
+                    service:services(id, name, duration_minutes, price),
+                    professional:profiles(id, full_name)
                 `)
                 .eq('company_id', profile?.company_id)
                 .gte('start_time', startStr)
@@ -263,7 +274,7 @@ export default function Appointments() {
         const maxDate = new Date(today);
         maxDate.setDate(today.getDate() + schedulingRules.scheduling_window_days);
 
-        return target <= maxDate;
+        return target < maxDate;
     };
 
     const isBusinessOpen = (date: Date, hour: number) => {
@@ -421,6 +432,37 @@ export default function Appointments() {
                                     <ChevronLeft className="w-4 h-4 text-slate-500" />
                                 </button>
                                 <button
+                                    disabled={(() => {
+                                        if (!schedulingRules?.scheduling_window_days) return false;
+
+                                        // Calculate Max Date
+                                        const today = new Date();
+                                        today.setHours(0, 0, 0, 0);
+                                        const maxDate = new Date(today);
+                                        maxDate.setDate(today.getDate() + schedulingRules.scheduling_window_days);
+
+                                        // Calculate Next View Start Date
+                                        const nextDate = new Date(currentDate);
+                                        if (viewMode === 'calendar') {
+                                            nextDate.setMonth(currentDate.getMonth() + 1);
+                                            nextDate.setDate(1); // Start of next month
+                                        } else {
+                                            // Grid View
+                                            // Ensure we are comparing correctly against the start of the next period
+                                            if (numDays === 7) {
+                                                // If currently Monday 15th, next is Monday 22nd.
+                                                // We need to check if Monday 22nd is > maxDate
+                                                // If maxDate is 22nd, 22nd > 22nd is False. So enabled. Correct.
+                                                // If maxDate is 21st, 22nd > 21st is True. So disabled. Correct.
+                                                nextDate.setDate(currentDate.getDate() + 7);
+                                            } else {
+                                                nextDate.setDate(currentDate.getDate() + 1);
+                                            }
+                                        }
+                                        nextDate.setHours(0, 0, 0, 0);
+
+                                        return nextDate >= maxDate;
+                                    })()}
                                     onClick={() => {
                                         const newDate = new Date(currentDate);
                                         if (viewMode === 'calendar') {
@@ -430,7 +472,7 @@ export default function Appointments() {
                                         }
                                         setCurrentDate(newDate);
                                     }}
-                                    className={`p-1 rounded-r-lg transition-colors ${theme === 'dark' ? 'hover:bg-black' : 'hover:bg-slate-200'}`}
+                                    className={`p-1 rounded-r-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${theme === 'dark' ? 'hover:bg-black' : 'hover:bg-slate-200'}`}
                                 >
                                     <ChevronRight className="w-4 h-4 text-slate-500" />
                                 </button>
@@ -677,6 +719,7 @@ export default function Appointments() {
                                                         return (
                                                             <div
                                                                 key={apt.id}
+                                                                onClick={(e) => handleAppointmentClick(apt, e)}
                                                                 className={`absolute rounded text-xs border z-10 shadow-sm group cursor-pointer hover:z-50 ${getStatusColor(apt.status)}`}
                                                                 style={{
                                                                     top: `${topPct}%`,
@@ -747,8 +790,18 @@ export default function Appointments() {
                                                     })}
 
                                                     {isAllowed && (
-                                                        <button className="absolute inset-0 w-full h-full opacity-0 group-hover:opacity-100 flex items-center justify-center pointer-events-none">
-                                                            <Plus className="w-4 h-4 text-blue-600" />
+                                                        <button
+                                                            onClick={() => {
+                                                                const yyyy = day.fullDate.getFullYear();
+                                                                const mm = String(day.fullDate.getMonth() + 1).padStart(2, '0');
+                                                                const dd = String(day.fullDate.getDate()).padStart(2, '0');
+                                                                setAppointmentDate(`${yyyy}-${mm}-${dd}`);
+                                                                setAppointmentTime(`${String(hour).padStart(2, '0')}:00`);
+                                                                setIsNewAppointmentOpen(true);
+                                                            }}
+                                                            className="absolute inset-0 w-full h-full opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer bg-blue-50/50 dark:bg-blue-900/10 transition-all"
+                                                        >
+                                                            <Plus className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                                                         </button>
                                                     )}
                                                 </div>
@@ -800,11 +853,14 @@ export default function Appointments() {
                                             {/* Indicators for appointments */}
                                             <div className="flex flex-col gap-1 mt-1">
                                                 {dayAppointments.slice(0, 3).map(apt => (
-                                                    <div key={apt.id} className={`text-[10px] truncate px-1 rounded ${apt.status === 'confirmed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                                                    <div
+                                                        key={apt.id}
+                                                        onClick={(e) => handleAppointmentClick(apt, e)}
+                                                        className={`text-[10px] truncate px-1 rounded cursor-pointer hover:opacity-80 transition-opacity ${apt.status === 'confirmed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
                                                             apt.status === 'pending' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
                                                                 apt.status === 'cancelled' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
                                                                     'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                                                        }`}>
+                                                            }`}>
                                                         {apt.start_date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} {apt.client_name}
                                                     </div>
                                                 ))}
@@ -821,6 +877,23 @@ export default function Appointments() {
                         </div>
                     )}
                 </div>
+
+                <AppointmentDetailsSlideOver
+                    isOpen={isDetailsOpen}
+                    onClose={() => setIsDetailsOpen(false)}
+                    appointment={selectedAppointment}
+                    onUpdate={fetchAppointments}
+                    companyName={profile?.companies?.name || 'Barbershop'}
+                    onEdit={(apt) => {
+                        // TODO: Implement Edit
+                        console.log("Edit requested for:", apt);
+                        setIsDetailsOpen(false);
+                        // Trigger open new appointment with prefilled?
+                        // This is complex as NewAppointmentSlideOver expects specific props
+                        // For now we just close or show alert
+                        alert('Edição de agendamento em breve.');
+                    }}
+                />
 
                 {/* Slide-over - Novo Agendamento */}
                 <NewAppointmentSlideOver
@@ -877,6 +950,8 @@ export default function Appointments() {
                                 start_time: startDateTime.toISOString(),
                                 end_time: endDateTime.toISOString(),
                                 status: initialStatus,
+                                payment_status: 'unpaid',
+                                origin: 'business',
                                 notes: notes,
                                 total_amount: total,
                                 discount_amount: discount,
@@ -898,6 +973,9 @@ export default function Appointments() {
                             setAppointmentTime('');
                         }
                     }}
+                    schedulingRules={schedulingRules}
+                    businessHours={businessHours}
+                    appointments={appointments}
                 />
 
             </div >

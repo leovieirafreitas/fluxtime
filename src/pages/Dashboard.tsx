@@ -11,22 +11,9 @@ import { useUserProfile } from '../hooks/useUserProfile';
 export default function Dashboard() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const { theme } = useTheme();
-    const { loading } = useUserProfile();
+    useUserProfile();
 
-    if (loading) {
-        return (
-            <div className={`min-h-screen flex items-center justify-center transition-colors duration-300 ${theme === 'dark' ? 'bg-black' : 'bg-slate-50'
-                }`}>
-                <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 rounded-full border-4 border-primary-500 border-t-transparent animate-spin"></div>
-                    <p className={`text-sm font-medium animate-pulse ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'
-                        }`}>
-                        Carregando informações...
-                    </p>
-                </div>
-            </div>
-        );
-    }
+
 
     return (
         <div

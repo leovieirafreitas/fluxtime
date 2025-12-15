@@ -27,6 +27,9 @@ interface NewAppointmentSlideOverProps {
     total: number;
     userFullName: string;
     onSubmit: (data: { name: string; notes: string }) => void;
+    schedulingRules: any;
+    businessHours: any[];
+    appointments: any[];
 }
 
 export default function NewAppointmentSlideOver({
@@ -50,12 +53,139 @@ export default function NewAppointmentSlideOver({
     // discount,
     total,
     userFullName,
-    onSubmit
+    onSubmit,
+    schedulingRules,
+    businessHours,
+    appointments
 }: NewAppointmentSlideOverProps) {
     const { theme } = useTheme();
     const [appointmentName, setAppointmentName] = useState('');
     const [notes, setNotes] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // --- LOGIC FOR CONSTRAINTS ---
+
+    // 1. Valid Dates
+    const isDateDisabled = (date: Date) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const check = new Date(date);
+        check.setHours(0, 0, 0, 0);
+
+        // Past dates
+        if (check < today) return true;
+
+        // Future limit
+        if (schedulingRules?.scheduling_window_days) {
+            const maxDate = new Date(today);
+            maxDate.setDate(today.getDate() + schedulingRules.scheduling_window_days);
+            if (check > maxDate) return true;
+        }
+
+        // Closed days (Business Hours check - OPTIONAL for DatePicker but good for logic)
+        // If the business is closed strictly on weekends, we could disable them.
+        // Assuming 'businessHours' contains objects { day_of_week: 0..6, is_open: boolean, ... }
+        if (businessHours && businessHours.length > 0) {
+            const dayOfWeek = check.getDay();
+            const dayConfig = businessHours.find((h: any) => h.day_of_week === dayOfWeek);
+            // If explicit config says closed, disable. If config missing, assume closed? Or open?
+            // Usually if missing, it means closed or default. Let's assume safely:
+            if (dayConfig && !dayConfig.is_open) return true;
+        }
+
+        return false;
+    };
+
+    // 2. Available Times for Selected Date
+    const getAvailableTimes = () => {
+        if (!appointmentDate) return [];
+
+        const dateParts = appointmentDate.split('-');
+        const currentSelectedDate = new Date(
+            parseInt(dateParts[0]),
+            parseInt(dateParts[1]) - 1,
+            parseInt(dateParts[2])
+        );
+
+        const dayOfWeek = currentSelectedDate.getDay();
+
+        // Get limits from Business Hours
+        // There can be multiple slots for same day? Usually logic is simplified to one range or multiple.
+        // The arrays 'businessHours' usually has 1 entry per day of week (0-6).
+        const dayConfig = businessHours?.find((h: any) => h.day_of_week === dayOfWeek);
+
+        if (!dayConfig || !dayConfig.is_open) return []; // Closed
+
+        const startStr = dayConfig.start_time; // "09:00"
+        const endStr = dayConfig.end_time; // "18:00"
+
+        if (!startStr || !endStr) return [];
+
+        const [startH, startM] = startStr.split(':').map(Number);
+        const [endH, endM] = endStr.split(':').map(Number);
+
+        const available: string[] = [];
+
+        // Interval
+        const interval = schedulingRules?.slot_interval_minutes || 30;
+
+        // Loop from start to end
+        let currentH = startH;
+        let currentM = startM;
+
+        // Helper to convert H:M to minutes
+        const toMinutes = (h: number, m: number) => h * 60 + m;
+        const endMinutes = toMinutes(endH, endM);
+
+        while (toMinutes(currentH, currentM) < endMinutes) {
+            const timeStr = `${String(currentH).padStart(2, '0')}:${String(currentM).padStart(2, '0')}`;
+
+            // Check specific availability (Collision with Appointments)
+            // We need to check if this slot overlaps with any existing appointment on that day
+            const slotStart = new Date(currentSelectedDate);
+            slotStart.setHours(currentH, currentM, 0, 0);
+
+            // Default service duration or 30 mins
+            const duration = selectedService?.duration_minutes || 30;
+            const slotEnd = new Date(slotStart.getTime() + duration * 60000);
+
+            // Check collision
+            const hasCollision = appointments?.some((apt: any) => {
+                const aptStart = new Date(apt.start_time);
+                const aptEnd = new Date(apt.end_time || (aptStart.getTime() + 30 * 60000));
+
+                // Check if overlapping
+                // Overlap exists if: SlotStart < AptEnd AND SlotEnd > AptStart
+                return slotStart < aptEnd && slotEnd > aptStart;
+            });
+
+            // Check Min Notice
+            const now = new Date();
+            let isTooShow = false;
+            if (schedulingRules?.min_notice_minutes) {
+                const limit = new Date(now.getTime() + schedulingRules.min_notice_minutes * 60000);
+                if (slotStart < limit) isTooShow = true;
+            } else {
+                if (slotStart < now) isTooShow = true; // Default, can't book in past
+            }
+
+            if (!hasCollision && !isTooShow) {
+                available.push(timeStr);
+            }
+
+            // Increment
+            currentM += interval;
+            if (currentM >= 60) {
+                currentH += Math.floor(currentM / 60);
+                currentM = currentM % 60;
+            }
+        }
+
+        return available;
+    };
+
+    const availableTimes = getAvailableTimes();
 
     if (!isOpen) return null;
 
@@ -113,6 +243,7 @@ export default function NewAppointmentSlideOver({
                                 label="Data *"
                                 value={appointmentDate}
                                 onChange={setAppointmentDate}
+                                isDateDisabled={isDateDisabled}
                             />
                         </div>
                         <div>
@@ -120,7 +251,8 @@ export default function NewAppointmentSlideOver({
                                 label="Horário *"
                                 value={appointmentTime}
                                 onChange={setAppointmentTime}
-                                step={15}
+                                step={schedulingRules?.slot_interval_minutes || 30}
+                                availableTimes={availableTimes}
                             />
                         </div>
                     </div>

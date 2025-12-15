@@ -6,9 +6,19 @@ interface CustomDatePickerProps {
     value: string; // YYYY-MM-DD
     onChange: (date: string) => void;
     label?: string;
+    minDate?: Date;
+    maxDate?: Date;
+    isDateDisabled?: (date: Date) => boolean;
 }
 
-export default function CustomDatePicker({ value, onChange, label }: CustomDatePickerProps) {
+export default function CustomDatePicker({
+    value,
+    onChange,
+    label,
+    minDate,
+    maxDate,
+    isDateDisabled
+}: CustomDatePickerProps) {
     const { theme } = useTheme();
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -69,16 +79,31 @@ export default function CustomDatePicker({ value, onChange, label }: CustomDateP
         const isSelected = value === yyyymmdd;
         const isToday = new Date().toDateString() === currentDate.toDateString();
 
+        // Check constraints
+        let isDisabled = false;
+
+        // Reset time for comparison
+        const checkDate = new Date(currentDate);
+        checkDate.setHours(0, 0, 0, 0);
+
+        if (minDate && checkDate < new Date(minDate.setHours(0, 0, 0, 0))) isDisabled = true;
+        if (maxDate && checkDate > new Date(maxDate.setHours(0, 0, 0, 0))) isDisabled = true;
+        if (isDateDisabled && isDateDisabled(checkDate)) isDisabled = true;
+
         days.push(
             <button
                 type="button"
                 key={i}
-                onClick={() => selectDate(i)}
-                className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${isSelected
-                    ? 'bg-blue-600 text-white'
-                    : isToday
-                        ? theme === 'dark' ? 'bg-zinc-800 text-blue-400 border border-blue-900' : 'bg-blue-50 text-blue-600 border border-blue-100'
-                        : theme === 'dark' ? 'text-zinc-300 hover:bg-zinc-900' : 'text-slate-700 hover:bg-slate-100'
+                onClick={() => !isDisabled && selectDate(i)}
+                disabled={isDisabled}
+                className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors 
+                    ${isDisabled
+                        ? 'opacity-25 cursor-not-allowed bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-600'
+                        : isSelected
+                            ? 'bg-blue-600 text-white'
+                            : isToday
+                                ? theme === 'dark' ? 'bg-zinc-800 text-blue-400 border border-blue-900' : 'bg-blue-50 text-blue-600 border border-blue-100'
+                                : theme === 'dark' ? 'text-zinc-300 hover:bg-zinc-900' : 'text-slate-700 hover:bg-slate-100'
                     }`}
             >
                 {i}

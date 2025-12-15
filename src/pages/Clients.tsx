@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, Download, MoreHorizontal, X, User, Phone, Mail, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import Sidebar from '../components/Sidebar';
@@ -15,6 +16,7 @@ interface Client {
 }
 
 export default function Clients() {
+    const navigate = useNavigate();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [clients, setClients] = useState<Client[]>([]);
     const [loading, setLoading] = useState(true);
@@ -185,7 +187,11 @@ export default function Clients() {
                                         </tr>
                                     ) : (
                                         filteredClients.map((client) => (
-                                            <tr key={client.id} className={`transition-colors ${theme === 'dark' ? 'hover:bg-slate-900' : 'hover:bg-slate-50'}`}>
+                                            <tr
+                                                key={client.id}
+                                                onClick={() => navigate(`/clients/${client.id}`)}
+                                                className={`transition-colors cursor-pointer ${theme === 'dark' ? 'hover:bg-slate-900' : 'hover:bg-slate-50'}`}
+                                            >
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="flex items-center gap-3">
                                                         <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${theme === 'dark' ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-600'

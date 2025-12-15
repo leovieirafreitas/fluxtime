@@ -9,6 +9,7 @@ export interface UserProfile {
     company_id: string;
     companies?: {
         name: string;
+        logo_url?: string;
     } | null;
 }
 
@@ -46,7 +47,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
             const { data, error } = await supabase
                 .from('profiles')
-                .select('*, companies(name)')
+                .select('*, companies(name, logo_url)')
                 .eq('id', user.id)
                 .single();
 

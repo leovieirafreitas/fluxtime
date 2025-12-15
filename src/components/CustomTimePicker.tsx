@@ -7,14 +7,23 @@ interface CustomTimePickerProps {
     onChange: (time: string) => void;
     label?: string;
     step?: number; // minutos
+    availableTimes?: string[];
 }
 
-export default function CustomTimePicker({ value, onChange, label, step = 30 }: CustomTimePickerProps) {
+export default function CustomTimePicker({
+    value,
+    onChange,
+    label,
+    step = 30,
+    availableTimes
+}: CustomTimePickerProps) {
     const { theme } = useTheme();
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
     const generateTimes = () => {
+        if (availableTimes) return availableTimes;
+
         const times = [];
         for (let i = 0; i < 24 * 60; i += step) {
             const h = Math.floor(i / 60);

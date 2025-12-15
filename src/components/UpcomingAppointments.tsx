@@ -30,12 +30,13 @@ export default function UpcomingAppointments() {
                     client_name,
                     start_time,
                     status,
+                    total_amount,
                     service:services(name, price)
                 `)
                 .eq('company_id', profile.company_id)
                 .gte('start_time', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()) // From start of today
                 .order('start_time', { ascending: true })
-                .limit(5);
+                .limit(100);
 
             if (data) {
                 const typedData = data as any as Appointment[];
@@ -89,9 +90,9 @@ export default function UpcomingAppointments() {
                         <p className="text-dark-300 mb-2">Nenhum agendamento futuro</p>
                     </div>
                 ) : (
-                    <div className="space-y-3">
+                    <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                         {appointments.map((appointment) => (
-                            <div key={appointment.id} className="glass-hover rounded-xl p-4 cursor-pointer">
+                            <div key={appointment.id} className="w-full glass-hover rounded-xl p-4 cursor-pointer border border-slate-100/50">
                                 <div className="flex items-start justify-between mb-2">
                                     <div>
                                         <h3 className="font-semibold text-dark-100">{appointment.client_name}</h3>
@@ -110,6 +111,9 @@ export default function UpcomingAppointments() {
                                         <Clock className="w-4 h-4" />
                                         <span>{formatTime(appointment.start_time)}</span>
                                     </div>
+                                    <div className="ml-auto font-medium text-slate-900">
+                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(appointment.total_amount ?? appointment.service?.price ?? 0)}
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -125,10 +129,13 @@ export default function UpcomingAppointments() {
                     </div>
                     <p className="text-4xl font-bold mb-2">
                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-                            appointments.reduce((acc, curr) => acc + (curr.service?.price || 0), 0)
+                            appointments.reduce((acc, curr) => {
+                                if (curr.status === 'cancelled') return acc;
+                                return acc + (curr.total_amount ?? curr.service?.price ?? 0);
+                            }, 0)
                         )}
                     </p>
-                    <p className="text-sm text-dark-400">Total previsto dos próximos 5 agendamentos</p>
+                    <p className="text-sm text-dark-400">Total previsto dos próximos agendamentos</p>
                 </div>
             </div>
         </div>
