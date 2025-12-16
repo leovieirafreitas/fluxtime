@@ -1253,18 +1253,8 @@ export default function PublicCompanyPage() {
                                             <form onSubmit={handleSubmitReview} className="space-y-4">
                                                 {/* Name */}
                                                 <div>
-                                                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                                                        Seu nome *
-                                                    </label>
-                                                    <input
-                                                        type="text"
-                                                        value={reviewName}
-                                                        onChange={(e) => setReviewName(e.target.value)}
-                                                        placeholder="Digite seu nome"
-                                                        required
-                                                        readOnly={isClientLoggedIn && !!clientName}
-                                                        className={`w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all ${isClientLoggedIn && !!clientName ? 'bg-slate-50 cursor-not-allowed' : ''}`}
-                                                    />
+
+
                                                     {isClientLoggedIn && (
                                                         <div className="mt-4 pt-4 border-t border-slate-100">
                                                             <p className="text-xs text-slate-500 mb-2">
