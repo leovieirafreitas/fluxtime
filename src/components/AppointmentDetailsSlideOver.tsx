@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, ChevronRight, Check, DollarSign, Edit, Trash2, Clock, User } from 'lucide-react';
+import { X, ChevronRight, Check, DollarSign, Edit, Trash2, Clock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import DefaultClientAvatar from './DefaultClientAvatar';

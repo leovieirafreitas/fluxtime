@@ -208,7 +208,7 @@ export default function PublicCompanyPage() {
                     const searchPhone = session.phone.replace(/\D/g, '');
 
                     // Check if this phone is already a client of THIS company
-                    const { data, error } = await supabase
+                    const { data } = await supabase
                         .rpc('public_check_client', {
                             p_phone: searchPhone,
                             p_company_id: company.id
