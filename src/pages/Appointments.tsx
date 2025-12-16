@@ -217,6 +217,7 @@ export default function Appointments() {
                     id,
                     start_time,
                     end_time,
+                    client_id,
                     client_name,
                     client_phone,
                     client_email,
@@ -253,6 +254,13 @@ export default function Appointments() {
                 });
                 console.log('Fetched appointments:', processed.length, processed);
                 setAppointments(processed);
+
+                // Update selectedAppointment if it exists to reflect changes (e.g. payment status)
+                setSelectedAppointment((prev: any) => {
+                    if (!prev) return null;
+                    const updated = processed.find((a: any) => a.id === prev.id);
+                    return updated ? { ...updated, _timestamp: Date.now() } : prev; // Force update
+                });
             }
         } catch (error) {
             console.error('Error fetching appointments:', error);

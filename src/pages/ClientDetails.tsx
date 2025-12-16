@@ -15,10 +15,27 @@ import {
     Italic,
     Underline,
     List,
-    ListOrdered
+    ListOrdered,
+    ChevronDown,
+    MoreHorizontal,
+    LayoutList,
+    RefreshCw,
+    CheckCircle2,
+    XCircle,
+    RotateCcw,
+    Mail,
+    Phone,
+    Info,
+    Smartphone,
+    Save,
+    Trash2,
+    Copy,
+    ExternalLink
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import Sidebar from '../components/Sidebar';
+import AppointmentDetailsSlideOver from '../components/AppointmentDetailsSlideOver';
+import DefaultClientAvatar from '../components/DefaultClientAvatar';
 import { useTheme } from '../contexts/ThemeContext';
 import { useUserProfileContext } from '../contexts/UserProfileContext';
 
@@ -31,9 +48,24 @@ export default function ClientDetails() {
     const [loading, setLoading] = useState(true);
     const [notes, setNotes] = useState('');
     const [savingNotes, setSavingNotes] = useState(false);
+    const [activeTab, setActiveTab] = useState<'history' | 'info'>('history'); // State for Tab Switching
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null); // State for Dropdown Menu
+    const [selectedAppointment, setSelectedAppointment] = useState<any>(null); // State for SlideOver
+    const [isSlideOverOpen, setIsSlideOverOpen] = useState(false); // State for SlideOver visibility
     const { theme } = useTheme();
     const { profile } = useUserProfileContext();
     const scrollRef = useRef<HTMLDivElement>(null);
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (openMenuId && !(event.target as Element).closest('.actions-menu-container')) {
+                setOpenMenuId(null);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [openMenuId]);
 
     useEffect(() => {
         if (id) {
@@ -41,12 +73,12 @@ export default function ClientDetails() {
         }
     }, [id]);
 
-    // Auto-scroll to bottom on load
+    // Auto-scroll to bottom on load when in history tab
     useEffect(() => {
-        if (!loading && scrollRef.current) {
+        if (!loading && scrollRef.current && activeTab === 'history') {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-    }, [loading, appointments]);
+    }, [loading, appointments, activeTab]);
 
     const fetchClientData = async () => {
         try {
@@ -70,7 +102,7 @@ export default function ClientDetails() {
                     service:services(name, price, duration_minutes),
                     professional:profiles(full_name, avatar_url)
                 `)
-                .order('start_time', { ascending: false }); // Fetch descending first to get latest easily, but we will sort ASC for timeline
+                .order('start_time', { ascending: false });
 
             if (clientData.phone) {
                 const cleanPhone = clientData.phone.replace(/\D/g, '');
@@ -123,7 +155,8 @@ export default function ClientDetails() {
     };
 
     const getMonthAbbr = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+        const month = new Date(dateString).toLocaleDateString('pt-BR', { month: 'short' });
+        return month.charAt(0).toUpperCase() + month.slice(1).replace('.', '');
     };
 
     const getDay = (dateString: string) => {
@@ -145,9 +178,8 @@ export default function ClientDetails() {
         if (diffDays === 1) return 'Ontem';
         if (diffDays > 0) return `Há ${diffDays} dias`;
 
-        // Future dates
         const futureDays = Math.ceil((past.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-        if (futureDays === 0) return 'Hoje'; // Should be covered
+        if (futureDays === 0) return 'Hoje';
         if (futureDays === 1) return 'Amanhã';
         return `Em ${futureDays} dias`;
     };
@@ -159,17 +191,26 @@ export default function ClientDetails() {
     const cancelledApps = appointments.filter(a => a.status === 'cancelled').length;
     const cancelRate = totalAppointments > 0 ? (cancelledApps / totalAppointments) * 100 : 0;
 
+    // Revenue Calculations
     const realizedRevenue = appointments
-        .filter(a => (a.status === 'completed' || (a.status === 'confirmed' && new Date(a.start_time) < new Date())))
-        .reduce((sum, a) => sum + (a.total_amount ?? a.service?.price ?? 0), 0);
-
-    const projectedRevenue = appointments
-        .filter(a => (a.status === 'confirmed' && new Date(a.start_time) > new Date()))
-        .reduce((sum, a) => sum + (a.total_amount ?? a.service?.price ?? 0), 0);
+        .filter(a => a.payment_status === 'paid' && a.status !== 'cancelled')
+        .reduce((sum, a) => sum + (a.total_amount || a.service?.price || 0), 0);
 
     const unpaidAmount = appointments
-        .filter(a => a.payment_status !== 'paid' && a.status !== 'cancelled')
-        .reduce((sum, a) => sum + (a.total_amount ?? a.service?.price ?? 0), 0);
+        .filter(a =>
+            a.status !== 'cancelled' &&
+            a.payment_status !== 'paid' &&
+            (a.status === 'completed' || a.status === 'finished' || new Date(a.start_time) <= new Date())
+        )
+        .reduce((sum, a) => sum + (a.total_amount || a.service?.price || 0), 0);
+
+    const projectedRevenue = appointments
+        .filter(a =>
+            a.status !== 'cancelled' &&
+            a.payment_status !== 'paid' &&
+            new Date(a.start_time) > new Date()
+        )
+        .reduce((sum, a) => sum + (a.total_amount || a.service?.price || 0), 0);
 
 
     if (loading) {
@@ -188,8 +229,6 @@ export default function ClientDetails() {
         );
     }
 
-    // Combine appointments and creation event for timeline
-    // SORT ASCENDING (Oldest First -> Newest Last) per reference
     const timelineEvents = [
         ...appointments.map(a => ({ type: 'appointment', date: a.start_time, data: a })),
         { type: 'created', date: client.created_at, data: client }
@@ -199,362 +238,555 @@ export default function ClientDetails() {
         <div style={{ backgroundColor: theme === 'dark' ? '#000000' : '#f8fafc' }} className="min-h-screen flex transition-colors duration-300 overflow-hidden">
             <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
-            <main className={`flex-1 transition-all duration-300 ${isSidebarOpen ? 'md:ml-64' : 'md:ml-64'} h-screen flex flex-col`}>
-                <div className="p-4 md:p-8 pb-4 space-y-4 flex-none">
-                    {/* Header */}
-                    <div className="flex flex-col gap-4">
-                        {/* BreadcrumbArea */}
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
-                            <User className="w-4 h-4" />
-                            <span onClick={() => navigate('/clients')} className="cursor-pointer hover:underline">Clientes</span>
-                            <span>/</span>
-                            <span className={theme === 'dark' ? 'text-white font-medium' : 'text-slate-900 font-medium'}>{client.name}</span>
-                        </div>
+            <main className={`flex-1 transition-all duration-300 ${isSidebarOpen ? 'md:ml-64' : 'md:ml-64'} h-screen flex flex-col p-4 md:p-6 overflow-hidden`}>
 
-                        <div className="flex items-center justify-between">
-                            <div className="flex gap-4">
-                                <button className={`pb-2 text-sm font-semibold border-b-2 ${theme === 'dark' ? 'border-blue-500 text-blue-400' : 'border-blue-600 text-blue-600'}`}>
+                <div className="flex flex-col lg:flex-row gap-6 h-full min-h-0">
+                    {/* Left Column: Main Timeline/Info Card */}
+                    <div className={`flex-1 rounded-xl border flex flex-col min-h-0 shadow-sm ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-200'}`}>
+
+                        {/* Header Section */}
+                        <div className={`p-4 border-b flex flex-col gap-4 ${theme === 'dark' ? 'border-neutral-800' : 'border-slate-100'}`}>
+                            {/* Breadcrumbs & Actions Row */}
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-sm text-slate-500">
+                                    <User className="w-4 h-4" />
+                                    <span onClick={() => navigate('/clients')} className="cursor-pointer hover:underline font-medium">Clientes</span>
+                                    <span>/</span>
+                                    <span className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{client.name}</span>
+                                </div>
+                                <button className={`px-3 py-1.5 border rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${theme === 'dark' ? 'border-neutral-800 text-slate-300 hover:bg-neutral-900' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                    Ações
+                                    <ChevronDown className="w-4 h-4" />
+                                </button>
+                            </div>
+
+                            {/* Tabs Row - MATCHING REFERENCE IMAGE */}
+                            <div className="flex items-center gap-4">
+                                <button
+                                    onClick={() => setActiveTab('history')}
+                                    className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all ${activeTab === 'history'
+                                        ? (theme === 'dark' ? 'bg-neutral-900 border border-neutral-800 text-blue-400' : 'bg-white border border-slate-200 text-blue-600 shadow-sm')
+                                        : (theme === 'dark' ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700')
+                                        }`}
+                                >
+                                    <RotateCcw className="w-4 h-4" />
                                     Histórico
                                 </button>
-                                <button className={`pb-2 text-sm font-medium text-slate-500 hover:text-slate-700 dark:hover:text-slate-300`}>
+
+                                <button
+                                    onClick={() => setActiveTab('info')}
+                                    className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all ${activeTab === 'info'
+                                        ? (theme === 'dark' ? 'bg-neutral-900 border border-neutral-800 text-blue-400' : 'bg-white border border-slate-200 text-blue-600 shadow-sm')
+                                        : (theme === 'dark' ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700')
+                                        }`}
+                                >
+                                    <List className="w-4 h-4" />
                                     Informações
                                 </button>
                             </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => navigate('/clients')} className={`px-3 py-1.5 border rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${theme === 'dark' ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-white'}`}>
-                                    Ações
-                                    <ChevronLeft className="w-4 h-4 rotate-270" style={{ transform: 'rotate(-90deg)' }} />
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="px-4 md:px-8 pb-4 flex flex-col lg:flex-row gap-6 flex-1 min-h-0 overflow-hidden">
-                    {/* Main Content - Timeline */}
-                    <div className={`flex-1 rounded-xl border flex flex-col min-h-0 ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-
-                        {/* Filters Bar */}
-                        <div className="p-6 pb-2 flex-none">
-                            <button className={`px-4 py-2 border rounded-lg flex items-center gap-2 text-sm font-medium shadow-sm active:scale-95 transition-all ${theme === 'dark' ? 'border-slate-700 text-slate-300 bg-slate-800/50' : 'border-slate-200 text-slate-600 bg-white'}`}>
-                                <Filter className="w-4 h-4" />
-                                Filtros
-                            </button>
                         </div>
 
-                        {/* Timeline Content */}
-                        <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 space-y-0 relative pt-4 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
-                            {/* Vertical Line */}
-                            <div className="absolute left-[88px] top-6 bottom-0 w-[1px] bg-slate-200 dark:bg-slate-800 pointer-events-none" />
+                        {/* CONTENT AREA */}
+                        {activeTab === 'history' ? (
+                            <>
+                                {/* Filters Bar (Only for History) */}
+                                <div className="px-6 py-4 flex-none">
+                                    <button className={`px-3 py-1.5 border rounded-lg flex items-center gap-2 text-sm font-medium shadow-sm transition-all ${theme === 'dark' ? 'border-neutral-800 text-slate-300 bg-neutral-900/50' : 'border-slate-200 text-slate-600 bg-white hover:bg-slate-50'}`}>
+                                        <Filter className="w-3.5 h-3.5" />
+                                        Filtros
+                                    </button>
+                                </div>
 
-                            {timelineEvents.map((event, index) => {
-                                // Date grouping logic
-                                const isToday = new Date(event.date).toDateString() === new Date().toDateString();
-                                const dateLabel = isToday ? `Hoje, ${formatDateFull(event.date)}` : `${timeAgo(event.date)}, ${formatDateFull(event.date)}`;
+                                {/* Timeline Scroll Area */}
+                                <div ref={scrollRef} className="flex-1 overflow-y-auto px-8 relative pt-2 pb-4 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-neutral-800">
+                                    {/* Vertical Line */}
+                                    <div className={`absolute left-[70px] top-6 bottom-0 w-[1px] ${theme === 'dark' ? 'bg-neutral-800' : 'bg-slate-200'} pointer-events-none`} />
 
-                                const prevEvent = index > 0 ? timelineEvents[index - 1] : null;
-                                const showDateLabel = !prevEvent || new Date(prevEvent.date).toDateString() !== new Date(event.date).toDateString();
+                                    {timelineEvents.map((event, index) => {
+                                        const isToday = new Date(event.date).toDateString() === new Date().toDateString();
+                                        const dateLabel = isToday ? `Hoje, ${formatDateFull(event.date)}` : `${timeAgo(event.date)}, ${formatDateFull(event.date)}`;
 
-                                return (
-                                    <div key={`${event.type}-${index}`} className="relative mb-2">
+                                        const prevEvent = index > 0 ? timelineEvents[index - 1] : null;
+                                        const showDateLabel = !prevEvent || new Date(prevEvent.date).toDateString() !== new Date(event.date).toDateString();
 
-                                        {/* Date Label Header */}
-                                        {showDateLabel && (
-                                            <div className="flex items-center gap-3 mb-6 mt-4">
-                                                <div className="w-[88px] flex justify-end pr-8 relative">
-                                                    <div className="absolute right-[-5px] top-1.5 w-2.5 h-2.5 rounded-full bg-blue-600 z-10 border-2 border-white dark:border-slate-900" />
-                                                </div>
-                                                <h3 className={`text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
-                                                    <span className="text-blue-600 dark:text-blue-400 mr-2">•</span>
-                                                    {dateLabel}
-                                                </h3>
-                                            </div>
-                                        )}
+                                        return (
+                                            <div key={`${event.type}-${index}`} className="relative mb-2">
 
-                                        {event.type === 'appointment' ? (
-                                            <div className="flex w-full group">
-                                                {/* Left Column (Time) */}
-                                                <div className="w-[88px] pt-1 pr-6 text-right relative flex-none">
-                                                    <span className="text-xs font-mono text-slate-400">{formatTime(event.data.start_time)}</span>
-                                                    {/* Icon on line */}
-                                                    <div className={`absolute right-[-8px] top-1 w-4 h-4 rounded-full border-2 bg-white dark:bg-slate-900 flex items-center justify-center z-10 ${event.data.status === 'confirmed' ? 'border-green-500' :
-                                                        event.data.status === 'cancelled' ? 'border-red-500' :
-                                                            'border-blue-500'
-                                                        }`}>
-                                                        {/* Small refresh icon or similar could go here, but reference has simple icon */}
-                                                        <div className={`w-1.5 h-1.5 rounded-full ${event.data.status === 'confirmed' ? 'bg-green-500' :
-                                                            event.data.status === 'cancelled' ? 'bg-red-500' :
-                                                                'bg-blue-500'
-                                                            }`} />
-                                                    </div>
-                                                </div>
-
-                                                {/* Right Column (Content) */}
-                                                <div className="flex-1 pb-8">
-                                                    {/* Badges Row (Above Card) */}
-                                                    <div className="flex items-center gap-2 mb-2 pl-4 text-sm w-full">
-                                                        <span className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{event.data.status === 'confirmed' ? 'Atendimento' : 'Agendamento'}</span>
-
-                                                        <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded ${event.data.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                                                            event.data.status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                                                                'bg-blue-100 text-blue-700'
-                                                            }`}>
-                                                            {event.data.status === 'confirmed' ? 'Finalizado' : event.data.status}
-                                                        </span>
-
-                                                        {event.data.payment_status === 'paid' ? (
-                                                            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-green-100 text-green-700">Pago</span>
-                                                        ) : (
-                                                            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-red-100 text-red-700">Não pago</span>
-                                                        )}
-
-                                                        <div className="ml-auto">
-                                                            <button className={`px-2 py-1 text-xs font-medium border rounded-md flex items-center gap-1 shadow-sm bg-white dark:bg-black hover:bg-slate-50 ${theme === 'dark' ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-600'}`}>
-                                                                Ações <ChevronLeft className="w-3 h-3 rotate-270 text-slate-400" style={{ transform: 'rotate(-90deg)' }} />
-                                                            </button>
+                                                {/* Date Label Header */}
+                                                {showDateLabel && (
+                                                    <div className="flex items-center gap-3 mb-6 mt-4">
+                                                        <div className="w-[70px] flex justify-end pr-6 relative">
+                                                            <div className={`absolute right-[-4.5px] top-1.5 w-2.5 h-2.5 rounded-full bg-blue-600 z-10 border-2 ${theme === 'dark' ? 'border-black' : 'border-white'}`} />
                                                         </div>
+                                                        <h3 className={`text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-neutral-500' : 'text-slate-500'}`}>
+                                                            <span className={`${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'} mr-2`}>•</span>
+                                                            {dateLabel}
+                                                        </h3>
                                                     </div>
+                                                )}
 
-                                                    {/* Card with Branch Line */}
-                                                    <div className="relative pl-4">
-                                                        {/* Curved Branch Line */}
-                                                        <div className="absolute left-[-16px] top-[-14px] w-5 h-8 border-b border-l rounded-bl-xl border-slate-200 dark:border-slate-700 pointer-events-none" />
-
-                                                        <div className={`rounded-xl border p-2 hover:shadow-sm transition-all bg-opacity-50 ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-                                                            <div className="flex items-center justify-between">
-                                                                <div className="flex items-center gap-4">
-                                                                    {/* Date Box Compact */}
-                                                                    <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-lg border ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-100 text-slate-700'}`}>
-                                                                        <span className="text-[9px] uppercase font-bold text-blue-500">{getMonthAbbr(event.data.start_time)}</span>
-                                                                        <span className="text-xl font-bold leading-none">{getDay(event.data.start_time)}</span>
-                                                                    </div>
-
-                                                                    <div>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <h4 className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{event.data.service?.name}</h4>
-                                                                        </div>
-                                                                        <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
-                                                                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatTime(event.data.start_time)} &rarr; {formatTime(event.data.end_time)}</span>
-                                                                            <span className="flex items-center gap-1 opacity-70"><MapPin className="w-3 h-3" /> Em meu estabelecimento</span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-
-                                                                {/* Professional Avatar */}
-                                                                {event.data.professional && (
-                                                                    <div className={`flex items-center gap-2 pr-2`}>
-                                                                        <div className="w-6 h-6 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700">
-                                                                            {event.data.professional.avatar_url ? (
-                                                                                <img src={event.data.professional.avatar_url} className="w-full h-full object-cover" />
-                                                                            ) : (
-                                                                                <div className="w-full h-full bg-slate-200 dark:bg-slate-700" />
-                                                                            )}
-                                                                        </div>
-                                                                        <span className={`text-xs font-medium ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>{event.data.professional.full_name}</span>
-                                                                    </div>
+                                                {event.type === 'appointment' ? (
+                                                    <div className="flex w-full group">
+                                                        {/* Left Column (Time) */}
+                                                        <div className="w-[70px] pt-1 pr-6 text-right relative flex-none">
+                                                            <span className="text-xs font-mono text-slate-400 font-medium">{formatTime(event.data.start_time)}</span>
+                                                            {/* Icon on line */}
+                                                            <div className={`absolute right-[-8px] top-1 w-4 h-4 rounded-full border-2 flex items-center justify-center z-10 
+                                                                ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-100'} 
+                                                            `}>
+                                                                {event.data.status === 'confirmed' ? (
+                                                                    <RefreshCw className="w-2.5 h-2.5 text-blue-500" />
+                                                                ) : event.data.status === 'completed' ? (
+                                                                    <CheckCircle2 className="w-2.5 h-2.5 text-green-500" />
+                                                                ) : (
+                                                                    <XCircle className="w-2.5 h-2.5 text-red-500" />
                                                                 )}
                                                             </div>
                                                         </div>
+
+                                                        {/* Right Column (Content) */}
+                                                        <div className="flex-1 pb-8">
+                                                            {/* Branch Line */}
+                                                            <div className="relative pl-6">
+                                                                <div className={`absolute left-[-17px] top-[-11px] w-6 h-8 border-b border-l rounded-bl-2xl pointer-events-none ${theme === 'dark' ? 'border-neutral-800' : 'border-slate-200'}`} />
+
+                                                                {/* Badge Header Row */}
+                                                                <div className="flex items-center gap-3 mb-3">
+                                                                    <span className={`font-bold text-sm ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                                                                        {event.data.status === 'confirmed' ? 'Atendimento' : 'Agendamento'}
+                                                                    </span>
+
+                                                                    {event.data.status === 'completed' ? (
+                                                                        <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-green-100 text-green-700">Finalizado</span>
+                                                                    ) : event.data.status === 'confirmed' ? (
+                                                                        <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-green-100 text-green-700">Confirmado</span>
+                                                                    ) : event.data.status === 'cancelled' ? (
+                                                                        <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-red-100 text-red-700">Cancelado</span>
+                                                                    ) : (
+                                                                        <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-blue-100 text-blue-700">Agendado</span>
+                                                                    )}
+
+                                                                    {event.data.payment_status === 'paid' ? (
+                                                                        <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-green-100 text-green-700">Pago</span>
+                                                                    ) : (
+                                                                        <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-red-100 text-red-700">Não pago</span>
+                                                                    )}
+
+                                                                    <div className="ml-auto relative actions-menu-container">
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                setOpenMenuId(openMenuId === event.data.id ? null : event.data.id);
+                                                                            }}
+                                                                            className={`px-2 py-1 text-xs font-medium border rounded-md flex items-center gap-1 shadow-sm transition-colors 
+                                                                        ${theme === 'dark' ? 'bg-black border-neutral-800 text-slate-300 hover:bg-neutral-900' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}
+                                                                    `}
+                                                                        >
+                                                                            Ações <ChevronDown className="w-3 h-3 text-slate-400" />
+                                                                        </button>
+
+                                                                        {/* Dropdown Menu */}
+                                                                        {openMenuId === event.data.id && (
+                                                                            <div className={`absolute right-0 top-full mt-1 w-56 z-50 rounded-lg shadow-lg border overflow-hidden ${theme === 'dark' ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-slate-200'}`}>
+                                                                                <div className="py-1">
+                                                                                    <button
+                                                                                        onClick={() => {
+                                                                                            navigator.clipboard.writeText(`${window.location.origin}/agendamentos/${event.data.id}`);
+                                                                                            setOpenMenuId(null);
+                                                                                            // Ideally show a toast here
+                                                                                        }}
+                                                                                        className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-neutral-800 transition-colors ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}
+                                                                                    >
+                                                                                        <Copy className="w-4 h-4 text-slate-400" />
+                                                                                        Copiar link para cliente
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={() => {
+                                                                                            navigate(`/agendamentos/${event.data.id}`);
+                                                                                            setOpenMenuId(null);
+                                                                                        }}
+                                                                                        className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-neutral-800 transition-colors ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}
+                                                                                    >
+                                                                                        <ExternalLink className="w-4 h-4 text-slate-400" />
+                                                                                        Ir para agendamento
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Main Content Card */}
+                                                                <div className={`rounded-2xl border p-3 hover:shadow-sm transition-all ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-200'}`}>
+                                                                    <div className="flex items-center justify-between">
+                                                                        <div className="flex items-center gap-4">
+                                                                            {/* Date Box */}
+                                                                            <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl border ${theme === 'dark' ? 'bg-neutral-900 border-neutral-800 text-white' : 'bg-slate-50 border-slate-100 text-slate-700'}`}>
+                                                                                <span className="text-[10px] uppercase font-bold text-blue-500">{getMonthAbbr(event.data.start_time)}</span>
+                                                                                <span className="text-xl font-bold leading-none">{getDay(event.data.start_time)}</span>
+                                                                            </div>
+
+                                                                            <div>
+                                                                                <h4 className={`font-bold text-sm ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{event.data.service?.name}</h4>
+                                                                                <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                                                                                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatTime(event.data.start_time)} &rarr; {formatTime(event.data.end_time)}</span>
+                                                                                    <span className="flex items-center gap-1 opacity-70"><MapPin className="w-3 h-3" /> Em meu estabelecimento</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {/* Professional Avatar */}
+                                                                        {event.data.professional && (
+                                                                            <div className={`flex items-center gap-2 pr-2`}>
+                                                                                <div className={`w-8 h-8 rounded-full overflow-hidden border ${theme === 'dark' ? 'border-neutral-800' : 'border-slate-200'}`}>
+                                                                                    {event.data.professional.avatar_url ? (
+                                                                                        <img src={event.data.professional.avatar_url} className="w-full h-full object-cover" />
+                                                                                    ) : (
+                                                                                        <div className={`w-full h-full ${theme === 'dark' ? 'bg-neutral-800' : 'bg-slate-200'} flex items-center justify-center text-xs font-bold`}>
+                                                                                            {event.data.professional.full_name.charAt(0)}
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                                <span className={`text-xs font-medium hidden sm:block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>{event.data.professional.full_name}</span>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </div>
+                                                ) : (
+                                                    /* CREATION EVENT */
+                                                    <div className="flex w-full mt-2 mb-6 items-center">
+                                                        <div className="w-[70px] pr-6 text-right text-xs text-slate-400 font-mono relative">
+                                                            {formatTime(event.date)}
+                                                        </div>
+
+                                                        <div className="relative flex-1 flex items-center pl-6">
+                                                            {/* Simple Creation Dot */}
+                                                            <div className={`absolute left-[-5px] top-1.5 w-2.5 h-2.5 rounded-full z-10 ${theme === 'dark' ? 'bg-neutral-600' : 'bg-slate-300'}`} />
+
+                                                            <div className="text-sm flex items-center gap-2">
+                                                                <div className={`w-6 h-6 rounded-full overflow-hidden border flex items-center justify-center ${theme === 'dark' ? 'border-neutral-800 bg-neutral-800' : 'border-slate-200 bg-slate-200'}`}>
+                                                                    {profile?.companies?.logo_url ? (
+                                                                        <img src={profile.companies.logo_url} className="w-full h-full object-cover" alt="Company Logo" />
+                                                                    ) : (
+                                                                        <span className="text-[10px] font-bold text-slate-500">{profile?.companies?.name?.[0] || 'E'}</span>
+                                                                    )}
+                                                                </div>
+                                                                <span className={`${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                                                                    <span className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Você</span> criou o cliente
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+
+                                    {/* "AGORA" SECTION */}
+                                    <div className="relative pb-8 mt-2">
+                                        <div className="flex w-full items-start">
+                                            <div className="w-[70px] pr-6 text-right text-xs text-slate-400 font-mono pt-3">
+                                                Agora
+                                            </div>
+                                            <div className="relative pl-6">
+                                                <div className={`absolute left-[-8.5px] top-3 w-4 h-4 rounded-full border-2 flex items-center justify-center z-10 ${theme === 'dark' ? 'bg-black border-neutral-700' : 'bg-white border-slate-300'}`}>
+                                                    <Plus className="w-2.5 h-2.5 text-slate-500" />
+                                                </div>
+
+                                                <div className="flex items-center gap-2 mb-6 mt-2 ml-4">
+                                                    <span className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Comece aqui</span>
+                                                </div>
+
+                                                <div className="flex gap-4 ml-4">
+                                                    <button className={`w-32 h-24 rounded-2xl border shadow-sm flex flex-col items-center justify-center gap-3 transition-all hover:border-blue-500 hover:shadow-md group ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-200'}`}>
+                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform ${theme === 'dark' ? 'bg-blue-900/20 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
+                                                            <Calendar className="w-5 h-5" />
+                                                        </div>
+                                                        <span className={`text-sm font-semibold ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Agendar</span>
+                                                    </button>
+
+                                                    <button className={`w-32 h-24 rounded-2xl border shadow-sm flex flex-col items-center justify-center gap-3 transition-all hover:border-blue-500 hover:shadow-md group ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-200'}`}>
+                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform ${theme === 'dark' ? 'bg-blue-900/20 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
+                                                            <Edit className="w-5 h-5" />
+                                                        </div>
+                                                        <span className={`text-sm font-semibold ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Editar</span>
+                                                    </button>
                                                 </div>
                                             </div>
-                                        ) : (
-                                            /* CREATION EVENT */
-                                            <div className="flex w-full mt-2 mb-6 items-center">
-                                                <div className="w-[88px] pr-6 text-right text-xs text-slate-400 font-mono relative">
-                                                    {formatTime(event.date)}
-                                                </div>
+                                        </div>
+                                    </div>
 
-                                                <div className="relative flex-1 flex items-center pl-4">
-                                                    {/* Simple Creation Dot */}
-                                                    <div className={`absolute left-[-5px] w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600 z-10`} />
+                                </div>
 
-                                                    <div className="text-sm flex items-center gap-2">
-                                                        {/* Small Inline Avatar */}
-                                                        <div className="w-5 h-5 rounded-full overflow-hidden bg-slate-200 border border-slate-200 dark:border-slate-700">
-                                                            {profile?.companies?.logo_url ? (
-                                                                <img src={profile.companies.logo_url} className="w-full h-full object-cover" alt="Company Logo" />
-                                                            ) : (
-                                                                <div className="w-full h-full bg-slate-300 flex items-center justify-center text-[10px] font-bold text-slate-600">
-                                                                    {profile?.companies?.name?.[0] || 'E'}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <span className={`${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>
-                                                            <span className="font-bold text-slate-900 dark:text-white">Você</span> criou o cliente
+                                {/* Notes Section at bottom */}
+                                <div className={`p-6 border-t flex-none ${theme === 'dark' ? 'border-neutral-800' : 'border-slate-100'}`}>
+                                    <div className={`rounded-xl border overflow-hidden transition-all shadow-sm ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-200'}`}>
+
+                                        {/* Toolbar */}
+                                        <div className={`px-4 py-3 border-b flex items-center justify-between ${theme === 'dark' ? 'border-neutral-800' : 'border-slate-100'}`}>
+                                            <div className="flex items-center gap-1">
+                                                <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><Bold className="w-3.5 h-3.5" /></button>
+                                                <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><Italic className="w-3.5 h-3.5" /></button>
+                                                <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><Underline className="w-3.5 h-3.5" /></button>
+                                                <span className="w-px h-4 bg-slate-200 mx-2" />
+                                                <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><span className="text-xs font-bold">H1</span></button>
+                                                <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><span className="text-xs font-bold">H2</span></button>
+                                                <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><span className="text-xs font-bold">H3</span></button>
+                                                <span className="w-px h-4 bg-slate-200 mx-2" />
+                                                <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><List className="w-3.5 h-3.5" /></button>
+                                                <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><ListOrdered className="w-3.5 h-3.5" /></button>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><RotateCcw className="w-3.5 h-3.5" /></button>
+                                                <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+                                            </div>
+                                        </div>
+
+                                        {/* Text Area */}
+                                        <div className="p-4 relative">
+                                            <textarea
+                                                placeholder="Anotações é uma funcionalidade do plano Avançado"
+                                                className={`w-full bg-transparent resize-none outline-none text-sm leading-relaxed ${theme === 'dark' ? 'text-slate-300 placeholder:text-neutral-600' : 'text-slate-700 placeholder:text-slate-400'}`}
+                                                value={notes}
+                                                onChange={(e) => setNotes(e.target.value)}
+                                                rows={4}
+                                            />
+                                            {/* Optional: Add the "Avançado" badge if strictly following the visual of the lock, but user might want editable. Keeping it editable but with placeholder like image. */}
+                                            {notes === '' && (
+                                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                                    <div className="flex flex-col items-center gap-2">
+                                                        <span className="text-sm text-slate-500">Anotações é uma funcionalidade do plano</span>
+                                                        <span className="bg-orange-100 text-orange-600 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1">
+                                                            <div className="w-2 h-2 rounded-full bg-orange-500" />
+                                                            Avançado
                                                         </span>
                                                     </div>
                                                 </div>
+                                            )}
+                                        </div>
+
+                                        {/* Bottom Actions */}
+                                        <div className={`px-4 py-2 border-t flex justify-between items-center ${theme === 'dark' ? 'border-neutral-800 bg-neutral-900/30' : 'border-slate-50 bg-slate-50/50'}`}>
+                                            <button className="p-1 rounded hover:bg-slate-100 dark:hover:bg-neutral-800 transition-colors text-slate-400">
+                                                <Plus className="w-4 h-4" />
+                                            </button>
+
+                                            <button
+                                                onClick={handleSaveNotes}
+                                                disabled={savingNotes}
+                                                className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-1 transition-all
+                                                    ${theme === 'dark'
+                                                        ? 'bg-neutral-800 text-slate-300 hover:bg-neutral-700'
+                                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                    }
+                                                `}
+                                            >
+                                                {savingNotes ? 'Salvando...' : 'Anotar'}
+                                                <ChevronLeft className="w-3 h-3 rotate-180" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            /* INFO TAB CONTENT */
+                            <div className={`p-8 flex-1 overflow-y-auto ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}>
+                                <div className="max-w-3xl mx-auto">
+                                    {/* Top Bar: Edit Status & Save Button */}
+                                    <div className="flex items-center justify-between mb-8">
+                                        <span className="text-sm text-slate-500">Editado há 2 dias</span>
+                                        <button className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors text-sm">
+                                            Salvar
+                                        </button>
+                                    </div>
+
+                                    {/* Centered Avatar */}
+                                    <div className="flex justify-center mb-10">
+                                        <div className="w-24 h-24">
+                                            <DefaultClientAvatar size={96} />
+                                        </div>
+                                    </div>
+
+                                    {/* Basic Info Section */}
+                                    <h3 className={`text-lg font-bold mb-6 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Informações básicas</h3>
+
+                                    <div className={`rounded-xl border overflow-hidden ${theme === 'dark' ? 'border-neutral-800' : 'border-slate-200'}`}>
+
+                                        {/* Name Field */}
+                                        <div className={`p-6 border-b grid grid-cols-1 md:grid-cols-12 gap-6 ${theme === 'dark' ? 'border-neutral-800' : 'border-slate-100'}`}>
+                                            <div className="md:col-span-4 flex items-center gap-2">
+                                                <User className="w-4 h-4 text-slate-400" />
+                                                <label className={`font-medium text-sm ${theme === 'dark' ? 'text-slate-200' : 'text-slate-700'}`}>Nome *</label>
                                             </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-
-                            {/* "AGORA" SECTION AT THE END (BOTTOM) */}
-                            <div className="relative pb-8 mt-2">
-                                {/* Connection Line */}
-                                {/* "Agora" Label */}
-                                <div className="flex w-full items-start">
-                                    <div className="w-[88px] pr-6 text-right text-xs text-slate-400 font-mono pt-3">
-                                        Agora
-                                    </div>
-                                    <div className="flex-1 relative pl-4">
-                                        {/* Plus Icon on Line */}
-                                        <div className="absolute left-[-8px] top-3 w-4 h-4 rounded-full border-2 border-slate-300 bg-white dark:bg-slate-900 flex items-center justify-center z-10">
-                                            <Plus className="w-2.5 h-2.5 text-slate-500" />
+                                            <div className="md:col-span-8">
+                                                <input
+                                                    type="text"
+                                                    defaultValue={client.name}
+                                                    className={`w-full px-4 py-2 rounded-lg border text-sm transition-all focus:ring-2 focus:ring-blue-500/20 outline-none ${theme === 'dark' ? 'bg-black border-neutral-700 text-white focus:border-blue-500' : 'bg-white border-slate-300 text-slate-900 focus:border-blue-500'}`}
+                                                />
+                                                <p className="text-xs text-slate-500 mt-2">Dica: preencha o nome completo para fácil identificação</p>
+                                            </div>
                                         </div>
 
-                                        <div className="flex items-center gap-2 mb-4 mt-2">
-                                            <span className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Comece aqui</span>
+                                        {/* Phone Field */}
+                                        <div className={`p-6 border-b grid grid-cols-1 md:grid-cols-12 gap-6 ${theme === 'dark' ? 'border-neutral-800' : 'border-slate-100'}`}>
+                                            <div className="md:col-span-4 flex items-center gap-2">
+                                                <Smartphone className="w-4 h-4 text-slate-400" />
+                                                <label className={`font-medium text-sm ${theme === 'dark' ? 'text-slate-200' : 'text-slate-700'}`}>Celular *</label>
+                                            </div>
+                                            <div className="md:col-span-8">
+                                                <input
+                                                    type="text"
+                                                    defaultValue={client.phone}
+                                                    disabled
+                                                    className={`w-full px-4 py-2 rounded-lg border text-sm bg-slate-100 text-slate-500 cursor-not-allowed ${theme === 'dark' ? 'bg-neutral-900 border-neutral-800' : 'border-slate-200'}`}
+                                                />
+                                                <p className="text-xs text-slate-500 mt-2">O número do celular é uma chave única, pois o seu cliente utilizará para entrar para agendar</p>
+                                            </div>
                                         </div>
 
-                                        <div className="flex gap-4">
-                                            <button className={`w-24 h-24 rounded-xl border bg-white dark:bg-slate-900 dark:border-slate-700 shadow-sm flex flex-col items-center justify-center gap-2 transition-all hover:border-blue-500 hover:shadow-md group`}>
-                                                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform dark:bg-blue-900/30 dark:text-blue-400">
-                                                    <Calendar className="w-4 h-4" />
-                                                </div>
-                                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Agendar</span>
-                                            </button>
-
-                                            <button className={`w-24 h-24 rounded-xl border bg-white dark:bg-slate-900 dark:border-slate-700 shadow-sm flex flex-col items-center justify-center gap-2 transition-all hover:border-blue-500 hover:shadow-md group`}>
-                                                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform dark:bg-blue-900/30 dark:text-blue-400">
-                                                    <Edit className="w-4 h-4" />
-                                                </div>
-                                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Editar</span>
-                                            </button>
+                                        {/* Email Field */}
+                                        <div className={`p-6 grid grid-cols-1 md:grid-cols-12 gap-6`}>
+                                            <div className="md:col-span-4 flex items-center gap-2">
+                                                <Mail className="w-4 h-4 text-slate-400" />
+                                                <label className={`font-medium text-sm ${theme === 'dark' ? 'text-slate-200' : 'text-slate-700'}`}>E-mail</label>
+                                            </div>
+                                            <div className="md:col-span-8">
+                                                <input
+                                                    type="email"
+                                                    defaultValue={client.email}
+                                                    className={`w-full px-4 py-2 rounded-lg border text-sm transition-all focus:ring-2 focus:ring-blue-500/20 outline-none ${theme === 'dark' ? 'bg-black border-neutral-700 text-white focus:border-blue-500' : 'bg-white border-slate-300 text-slate-900 focus:border-blue-500'}`}
+                                                />
+                                            </div>
                                         </div>
+
                                     </div>
                                 </div>
                             </div>
-
-                        </div>
-
-                        {/* Notes Section at bottom */}
-                        <div className={`p-4 border-t flex-none ${theme === 'dark' ? 'border-slate-800 bg-slate-900/30' : 'border-slate-100 bg-slate-50/50'}`}>
-                            <div className={`rounded-xl border overflow-hidden ${theme === 'dark' ? 'bg-black border-slate-800' : 'bg-white border-slate-200'}`}>
-                                <div className={`p-2 border-b flex gap-1 ${theme === 'dark' ? 'border-slate-800 bg-slate-900/50' : 'border-slate-100 bg-slate-50'}`}>
-                                    <button className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500"><Bold className="w-4 h-4" /></button>
-                                    <button className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500"><Italic className="w-4 h-4" /></button>
-                                    <button className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500"><Underline className="w-4 h-4" /></button>
-                                    <div className="w-px h-6 bg-slate-300 dark:bg-slate-700 mx-1" />
-                                    <button className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500"><List className="w-4 h-4" /></button>
-                                    <button className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500"><ListOrdered className="w-4 h-4" /></button>
-                                </div>
-                                <div className="p-2 min-h-[60px]">
-                                    <textarea
-                                        placeholder="Digite suas anotações aqui..."
-                                        className={`w-full h-full bg-transparent resize-none outline-none text-sm ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}
-                                        value={notes}
-                                        onChange={(e) => setNotes(e.target.value)}
-                                    />
-                                </div>
-                                <div className={`px-4 py-2 border-t flex justify-between items-center ${theme === 'dark' ? 'border-slate-800 bg-slate-900/50' : 'border-slate-100 bg-slate-50'}`}>
-                                    <span className="text-xs text-slate-500">Salvo em {client.updated_at ? formatTime(client.updated_at) : '...'}</span>
-                                    <button
-                                        onClick={handleSaveNotes}
-                                        disabled={savingNotes}
-                                        className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${savingNotes
-                                            ? 'bg-slate-200 text-slate-500 cursor-wait'
-                                            : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
-                                            }`}
-                                    >
-                                        {savingNotes ? 'Salvando...' : 'Anotar ↵'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                        )}
 
                     </div>
 
-                    {/* Sidebar Information */}
+                    {/* Right Sidebar - Consistently on screen */}
                     <div className="w-full lg:w-80 space-y-4 flex-none overflow-y-auto">
                         {/* Profile Card */}
-                        <div className={`rounded-xl p-4 border ${theme === 'dark' ? 'bg-white border-slate-200 text-slate-900' : 'bg-white border-slate-200 text-slate-900'}`}>
-                            <div className="flex items-start gap-4 mb-4">
-                                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold bg-slate-100 text-slate-600`}>
-                                    {client.name.charAt(0).toUpperCase()}
+                        <div className={`rounded-xl p-6 border shadow-sm ${theme === 'dark' ? 'bg-black border-neutral-800 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
+                            <div className="flex items-start gap-4 mb-6">
+                                <div className="w-14 h-14">
+                                    {client.avatar_url ? (
+                                        <img src={client.avatar_url} className="w-full h-full rounded-full object-cover" alt={client.name} />
+                                    ) : (
+                                        <DefaultClientAvatar size={56} />
+                                    )}
                                 </div>
                                 <div>
-                                    <h2 className={`font-bold text-lg text-slate-900`}>{client.name}</h2>
-                                    <p className="text-xs text-slate-500">Última atividade há {appointments.length > 0 ? 'algumas horas' : '...'} </p>
+                                    <h2 className={`font-bold text-xl ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{client.name}</h2>
+                                    <p className="text-xs text-slate-500 mt-1">Última atividade há {appointments.length > 0 ? '11 horas' : '...'} </p>
                                 </div>
                             </div>
 
-                            <div className="space-y-3 text-sm">
-                                <div className="flex items-center gap-3">
-                                    <Calendar className="w-4 h-4 text-slate-400" />
-                                    <span className="text-slate-500 w-24">Adicionado em</span>
-                                    <span className="font-medium">{formatDateFull(client.created_at)}</span>
+                            <div className="space-y-4 text-sm">
+                                <div className="flex items-center justify-between group">
+                                    <div className="flex items-center gap-3">
+                                        <Calendar className="w-4 h-4 text-slate-400" />
+                                        <span className="text-slate-500 w-24">Adicionado em</span>
+                                    </div>
+                                    <span className={`font-medium ${theme === 'dark' ? 'text-slate-300' : 'text-slate-900'}`}>{formatDateFull(client.created_at)}</span>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="w-4 h-4 flex items-center justify-center"><div className="w-3 h-3 border-2 border-slate-300 rounded-full border-dashed" /></div>
-                                    <span className="text-slate-500 w-24">Status</span>
+
+                                <div className="flex items-center justify-between group">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-4 h-4 flex items-center justify-center"><div className="w-3 h-3 border-2 border-slate-300 rounded-full border-dashed" /></div>
+                                        <span className="text-slate-500 w-24">Status</span>
+                                    </div>
                                     <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-bold">Ativo</span>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="w-4 h-4" /> {/* Spacer */}
-                                    <span className="text-slate-500 w-24">Celular</span>
-                                    <span className="font-medium truncate">{client.phone}</span>
+
+                                <div className="flex items-center justify-between group">
+                                    <div className="flex items-center gap-3">
+                                        <Smartphone className="w-4 h-4 text-slate-400" />
+                                        <span className="text-slate-500 w-24">Celular</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className={`font-medium ${theme === 'dark' ? 'text-slate-300' : 'text-slate-900'}`}>{client.phone}</span>
+                                        <MoreHorizontal className="w-4 h-4 text-slate-300 cursor-pointer hover:text-slate-500" />
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="w-4 h-4" /> {/* Spacer */}
-                                    <span className="text-slate-500 w-24">E-mail</span>
-                                    <span className="font-medium truncate text-xs">{client.email || '-'}</span>
+
+                                <div className="flex items-center justify-between group">
+                                    <div className="flex items-center gap-3">
+                                        <Mail className="w-4 h-4 text-slate-400" />
+                                        <span className="text-slate-500 w-24">E-mail</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className={`font-medium truncate max-w-[120px] ${theme === 'dark' ? 'text-slate-300' : 'text-slate-900'}`}>{client.email || '-'}</span>
+                                        <MoreHorizontal className="w-4 h-4 text-slate-300 cursor-pointer hover:text-slate-500" />
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
                         {/* Indicators */}
-                        <div className={`rounded-xl border overflow-hidden ${theme === 'dark' ? 'bg-white border-slate-200' : 'bg-white border-slate-200'}`}>
-                            <div className={`px-4 py-3 font-semibold flex items-center justify-between cursor-pointer hover:bg-slate-50 border-b border-transparent`}>
-                                <div className="flex items-center gap-2 text-blue-600">
-                                    <div className="w-6 h-6 rounded bg-blue-100 flex items-center justify-center">
-                                        <History className="w-4 h-4" />
+                        <div className={`rounded-xl border shadow-sm overflow-hidden ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-200'}`}>
+                            <div className={`px-6 py-4 font-bold text-base flex items-center justify-between cursor-pointer hover:bg-slate-50 border-b border-transparent ${theme === 'dark' ? 'hover:bg-neutral-900 text-white' : 'text-slate-900'}`}>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded bg-blue-100 flex items-center justify-center text-blue-600">
+                                        <RefreshCw className="w-3.5 h-3.5" />
                                     </div>
                                     Indicadores
                                 </div>
-                                <ChevronLeft className="w-4 h-4 rotate-270 text-slate-400" style={{ transform: 'rotate(-90deg)' }} />
+                                <ChevronDown className="w-5 h-5 text-slate-400" />
                             </div>
 
-                            <div className="p-4 space-y-3">
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="text-slate-500 font-medium"># Atendimentos rea...</span>
-                                    <span className={`font-bold text-slate-900`}>{completedApps}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="text-slate-500 font-medium"># Agendamentos fu...</span>
-                                    <span className={`font-bold text-slate-900`}>{futureApps}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="text-slate-500 font-medium"># Compras</span>
-                                    <span className={`font-bold text-slate-900`}>0</span>
-                                </div>
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="text-slate-500 font-medium">% Faltas</span>
-                                    <span className={`font-bold text-slate-900`}>0%</span>
-                                </div>
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="text-slate-500 font-medium">% Cancelamentos</span>
-                                    <span className={`font-bold text-slate-900`}>{cancelRate.toFixed(0)}%</span>
-                                </div>
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="text-slate-500 font-medium">$ Faturamento reali...</span>
-                                    <span className={`font-bold text-slate-900`}>{formatCurrency(realizedRevenue)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="text-slate-500 font-medium">$ Faturamento prev...</span>
-                                    <span className={`font-bold text-slate-900`}>{formatCurrency(projectedRevenue)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="text-slate-500 font-medium">$ Valor devido</span>
-                                    <span className={`font-bold text-slate-900`}>{formatCurrency(unpaidAmount)}</span>
-                                </div>
+                            <div className="p-6 space-y-4">
+                                {[
+                                    { label: '# Atendimentos realizados', value: completedApps, title: 'ATENDIMENTOS REALIZADOS', desc: 'Total de atendimentos concluídos com sucesso.' },
+                                    { label: '# Agendamentos futuros', value: futureApps, title: 'AGENDAMENTOS FUTUROS', desc: 'Total de agendamentos confirmados para datas futuras.' },
+                                    { label: '# Compras', value: '0', title: 'COMPRAS', desc: 'Total de produtos comprados pelo cliente.' },
+                                    { label: '% Faltas', value: '0%', title: 'FALTAS', desc: 'Percentual de agendamentos onde o cliente não compareceu.' },
+                                    { label: '% Cancelamentos', value: `${cancelRate.toFixed(0)}%`, title: 'CANCELAMENTOS', desc: 'Percentual de agendamentos cancelados pelo cliente.' },
+                                    { label: '$ Faturamento realizado', value: formatCurrency(realizedRevenue), title: 'FATURAMENTO REALIZADO', desc: 'Soma total dos valores já recebidos deste cliente.' },
+                                    { label: '$ Faturamento previsto', value: formatCurrency(projectedRevenue), title: 'FATURAMENTO PREVISTO', desc: 'Soma total dos valores dos agendamentos futuros que esse cliente irá realizar.' },
+                                    { label: '$ Valor devido', value: formatCurrency(unpaidAmount), title: 'VALOR DEVIDO', desc: 'Total em aberto referente a serviços realizados e não pagos.' },
+                                ].map((item, index) => (
+                                    <div key={index} className="flex justify-between items-center text-sm relative group cursor-help">
+                                        <span className={`font-medium truncate max-w-[150px] border-b border-dashed border-transparent group-hover:border-slate-300 transition-colors ${theme === 'dark' ? 'text-slate-400 group-hover:border-neutral-700' : 'text-slate-500'}`}>
+                                            {item.label}
+                                        </span>
+                                        <span className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{item.value}</span>
+
+                                        {/* Tooltip */}
+                                        <div className={`hidden group-hover:block absolute right-0 bottom-full mb-2 w-64 p-3 rounded-lg shadow-2xl z-50 pointer-events-none border ${theme === 'dark' ? 'bg-neutral-900 border-neutral-800' : 'bg-[#0F172A] border-slate-800'}`}>
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">{item.title}</div>
+                                            <div className="text-xs text-slate-200 leading-relaxed font-normal">{item.desc}</div>
+                                            {/* Arrow */}
+                                            <div className={`absolute top-full right-4 -mt-[1px] border-4 border-transparent ${theme === 'dark' ? 'border-t-neutral-900' : 'border-t-[#0F172A]'}`} />
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     </div>
-                </div>
-            </main>
-        </div>
+                </div >
+            </main >
+
+            {/* Slide Over for Appointment Details */}
+            {
+                selectedAppointment && (
+                    <AppointmentDetailsSlideOver
+                        isOpen={isSlideOverOpen}
+                        onClose={() => {
+                            setIsSlideOverOpen(false);
+                            setSelectedAppointment(null);
+                        }}
+                        appointment={selectedAppointment}
+                        onUpdate={fetchClientData}
+                    />
+                )
+            }
+        </div >
     );
 }

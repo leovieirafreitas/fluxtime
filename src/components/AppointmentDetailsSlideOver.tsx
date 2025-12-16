@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { X, ChevronRight, Check, DollarSign, Edit, Trash2, Clock, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useNavigate } from 'react-router-dom';
+import DefaultClientAvatar from './DefaultClientAvatar';
 
 interface AppointmentDetailsSlideOverProps {
     isOpen: boolean;
@@ -19,6 +21,7 @@ export default function AppointmentDetailsSlideOver({
     companyName = 'Empresa',
     onEdit
 }: AppointmentDetailsSlideOverProps) {
+    const navigate = useNavigate();
     const [isClosing, setIsClosing] = useState(false);
     const [loading, setLoading] = useState(false);
     const [showActions, setShowActions] = useState(false);
@@ -40,6 +43,13 @@ export default function AppointmentDetailsSlideOver({
     };
 
     if (!appointment) return null;
+
+    const handleClientClick = () => {
+        if (appointment.client_id) {
+            navigate(`/clients/${appointment.client_id}`);
+            onClose();
+        }
+    };
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
@@ -223,10 +233,13 @@ export default function AppointmentDetailsSlideOver({
                     <hr className="border-slate-100" />
 
                     {/* Client Info */}
-                    <div className="flex items-center justify-between group cursor-pointer hover:bg-slate-50 -mx-2 p-2 rounded-xl transition-colors">
+                    <div
+                        onClick={handleClientClick}
+                        className="flex items-center justify-between group cursor-pointer hover:bg-slate-50 -mx-2 p-2 rounded-xl transition-colors"
+                    >
                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-gradient-to-br from-slate-200 to-slate-300 rounded-xl flex items-center justify-center text-slate-500 font-bold text-lg shadow-inner">
-                                {appointment.client_name?.charAt(0).toUpperCase() || <User className="w-6 h-6" />}
+                            <div className="w-12 h-12 flex-shrink-0">
+                                <DefaultClientAvatar size={48} />
                             </div>
                             <div>
                                 <div className="font-bold text-slate-900 text-lg">

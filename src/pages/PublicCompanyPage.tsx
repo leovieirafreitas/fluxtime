@@ -236,8 +236,24 @@ export default function PublicCompanyPage() {
 
     const fetchCompanyData = async () => {
         try {
-            const { data, error } = await supabase
-                .rpc('get_public_company_data', { p_slug: slug });
+            // Check if slug is a UUID (company ID) or a slug
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug || '');
+
+            let data, error;
+
+            if (isUUID) {
+                // Fetch by ID
+                const result = await supabase
+                    .rpc('get_public_company_data_by_id', { p_company_id: slug });
+                data = result.data;
+                error = result.error;
+            } else {
+                // Fetch by slug
+                const result = await supabase
+                    .rpc('get_public_company_data', { p_slug: slug });
+                data = result.data;
+                error = result.error;
+            }
 
             if (error) throw error;
             if (!data || data.length === 0) {

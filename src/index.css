@@ -93,3 +93,49 @@ body {
       rgba(0, 0, 0, 0.05) 100%);
   background-size: 1000px 100%;
 }
+
+/* Custom Scrollbar - System Identity */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  /* slate-300 */
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  /* Creates padding effect if background-clip is used, but simple is better here */
+  background-clip: content-box;
+  /* Optional: makes it look thinner with border */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+  /* slate-400 */
+}
+
+/* Dark Mode Scrollbar */
+/* Assuming 'dark' class is present on html or body when theme is dark, or matching data-theme */
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #404040;
+  /* neutral-700 */
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #525252;
+  /* neutral-600 */
+}
+
+/* Ensure .dark class works too if data-theme is not used consistently */
+.dark ::-webkit-scrollbar-thumb {
+  background: #404040;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #525252;
+}

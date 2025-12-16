@@ -62,7 +62,10 @@ function App() {
           <Route path="/client" element={<ClientLogin />} />
           <Route path="/client/dashboard" element={<ClientDashboard />} />
 
-          {/* Rota Pública - Página da Empresa */}
+          {/* Rota Pública - Página da Empresa por ID */}
+          <Route path="/book/:slug" element={<PublicCompanyPage />} />
+
+          {/* Rota Pública - Página da Empresa por Slug */}
           <Route path="/:slug" element={<PublicCompanyPage />} />
 
           <Route
