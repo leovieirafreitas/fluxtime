@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import NewAppointmentSlideOver from '../components/NewAppointmentSlideOver';
 import AppointmentDetailsSlideOver from '../components/AppointmentDetailsSlideOver';
@@ -52,13 +53,25 @@ export default function Appointments() {
 
     const hours = Array.from({ length: 24 }, (_, i) => i);
 
+    const [searchParams] = useSearchParams();
+
     useEffect(() => {
         if (profile?.company_id) {
             fetchCompanySettings();
             fetchSchedulingRules();
             fetchAppointments();
         }
-    }, [profile, currentDate, viewMode, numDays]); // Re-fetch appointments when date changes
+
+        const action = searchParams.get('action');
+        const clientId = searchParams.get('clientId');
+
+        if (action === 'new') {
+            setIsNewAppointmentOpen(true);
+            if (clientId) {
+                setSelectedClient(clientId);
+            }
+        }
+    }, [profile, currentDate, viewMode, numDays, searchParams]); // Re-fetch appointments when date changes
 
     const handleAppointmentClick = (apt: any, e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent triggering slot click

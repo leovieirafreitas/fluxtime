@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { whatsappService } from '../services/whatsapp';
-import { MapPin, Clock, X, Star, Instagram, Facebook, Globe, MessageCircle, BookOpen, Tag } from 'lucide-react';
+import { MapPin, Clock, X, Star, Instagram, Facebook, Globe, MessageCircle, BookOpen, Tag, LogOut, User, Lock, ChevronDown, Check } from 'lucide-react';
 import DatePicker from '../components/DatePicker';
 import OTPInput from '../components/OTPInput';
+import { getClientSession, clearClientSession } from '../lib/clientSession';
 
 interface Company {
     id: string;
@@ -90,16 +91,16 @@ export default function PublicCompanyPage() {
     const [busySlots, setBusySlots] = useState<{ start: number, end: number }[]>([]);
 
     // Initialize client state synchronously from localStorage to prevent flash
+    // Initialize client state synchronously
     const getInitialClientState = () => {
         try {
-            const clientSession = localStorage.getItem('client_session');
-            if (clientSession) {
-                const parsed = JSON.parse(clientSession);
+            const session = getClientSession();
+            if (session) {
                 return {
-                    isLoggedIn: !!parsed.phone,
-                    name: parsed.name || '',
-                    phone: parsed.phone || '',
-                    email: parsed.email || ''
+                    isLoggedIn: true,
+                    name: session.name || '',
+                    phone: session.phone || '',
+                    email: session.email || ''
                 };
             }
         } catch (e) {
@@ -138,13 +139,29 @@ export default function PublicCompanyPage() {
     const [appliedCoupon, setAppliedCoupon] = useState<{ code: string, discount: number, type: 'percent' | 'fixed' } | null>(null);
     const [validatingCoupon, setValidatingCoupon] = useState(false);
 
+    const handleLogout = () => {
+        clearClientSession();
+        setIsClientLoggedIn(false);
+        setClientId(null);
+        setClientName('');
+        setClientPhone('');
+        setClientEmail('');
+        setIsNewClient(false);
+        setShowRegistrationFields(false);
+    };
+
     // Initial load handling
     const [loading, setLoading] = useState(true);
     const [reviewName, setReviewName] = useState('');
     const [reviewComment, setReviewComment] = useState('');
     const [submittingReview, setSubmittingReview] = useState(false);
     const [reviewSubmitted, setReviewSubmitted] = useState(false);
+
     const [averageRating, setAverageRating] = useState(0);
+    const [canReview, setCanReview] = useState(false);
+    const [eligibleAppointments, setEligibleAppointments] = useState<any[]>([]);
+    const [selectedReviewAppointment, setSelectedReviewAppointment] = useState<any>(null);
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
     // Company Links State
     const [companyLinks, setCompanyLinks] = useState<any>(null);
@@ -179,18 +196,16 @@ export default function PublicCompanyPage() {
         }
     }, [loading]);
 
-    // Load client session and check against specific company ONCE company is loaded
     useEffect(() => {
         if (!company) return;
 
         const checkClientStatus = async () => {
-            const clientSession = localStorage.getItem('client_session');
-            if (!clientSession) return;
+            const session = getClientSession();
+            if (!session) return;
 
             try {
-                const parsed = JSON.parse(clientSession);
-                if (parsed.phone) {
-                    const searchPhone = parsed.phone.replace(/\D/g, '');
+                if (session.phone) {
+                    const searchPhone = session.phone.replace(/\D/g, '');
 
                     // Check if this phone is already a client of THIS company
                     const { data, error } = await supabase
@@ -199,9 +214,24 @@ export default function PublicCompanyPage() {
                             p_company_id: company.id
                         });
 
-                    const clientData = (data && Array.isArray(data) && data.length > 0) ? data[0] : null;
+                    let clientData = (data && Array.isArray(data) && data.length > 0) ? data[0] : null;
 
-                    if (clientData && !error) {
+                    // Fallback: If RPC didn't find, try direct query with variations
+                    if (!clientData) {
+                        const { data: directData } = await supabase
+                            .from('clients')
+                            .select('*')
+                            .eq('company_id', company.id)
+                            .in('phone', [searchPhone, session.phone])
+                            .limit(1)
+                            .maybeSingle();
+
+                        if (directData) {
+                            clientData = directData;
+                        }
+                    }
+
+                    if (clientData) {
                         // Found existing client in this company
                         setClientPhone(clientData.phone);
                         setClientName(clientData.name || '');
@@ -213,17 +243,17 @@ export default function PublicCompanyPage() {
                     } else {
                         // Protocol: Not a client of this company yet (or error)
                         // Pre-fill form from session but flag as new
-                        setClientPhone(parsed.phone);
+                        setClientPhone(session.phone);
                         setIsClientLoggedIn(true); // "LoggedIn" as in we know who they are (session)
-                        if (parsed.name) setClientName(parsed.name);
-                        if (parsed.email) setClientEmail(parsed.email);
+                        if (session.name) setClientName(session.name);
+                        if (session.email) setClientEmail(session.email);
 
                         // Functionally they are a new client for THIS company context
                         setIsNewClient(true);
                         setClientId(null);
                         // However, if we know them from session, do we show fields? Maybe not if fully pre-filled.
                         // Let's keep them hidden if we have the data, or check "global" logic later.
-                        setShowRegistrationFields(!(parsed.name && parsed.email));
+                        setShowRegistrationFields(!(session.name && session.email));
                     }
                 }
             } catch (e) {
@@ -343,6 +373,8 @@ export default function PublicCompanyPage() {
                 .from('reviews')
                 .insert({
                     company_id: company.id,
+                    client_id: clientId,
+                    appointment_id: selectedReviewAppointment?.id,
                     client_name: reviewName.trim(),
                     rating: reviewRating,
                     comment: reviewComment.trim() || null
@@ -390,14 +422,104 @@ export default function PublicCompanyPage() {
                 .from('company_links')
                 .select('*')
                 .eq('company_id', companyId)
-                .single();
+                .maybeSingle();
 
-            if (error && error.code !== 'PGRST116') throw error;
+            if (error) throw error;
             setCompanyLinks(data);
         } catch (error) {
             console.error('Error fetching company links:', error);
         }
     };
+
+    // Check if client can review
+    useEffect(() => {
+        const checkReviewEligibility = async () => {
+            if (!isClientLoggedIn || !company || !clientId) {
+                setCanReview(false);
+                return;
+            }
+
+            try {
+                // Check if user has at least one completed AND paid appointment
+                const { data, error } = await supabase
+                    .from('appointments')
+                    .select(`
+                        id, 
+                        start_time,
+                        services (
+                            name
+                        ),
+                        profiles (
+                            full_name
+                        )
+                    `)
+                    .eq('company_id', company.id)
+                    .eq('client_id', clientId)
+                    .in('status', ['completed', 'confirmed'])
+                    .eq('payment_status', 'paid')
+                    .order('start_time', { ascending: false });
+
+                // Also fetch existing reviews to filter them out
+                // Also fetch existing reviews to filter them out
+                const { data: existingReviews } = await supabase
+                    .from('reviews')
+                    .select('appointment_id, created_at')
+                    .eq('company_id', company.id)
+                    .eq('client_id', clientId);
+
+                const reviewedAppointmentIds = new Set<string>();
+                const reviewDates = new Set<string>();
+
+                existingReviews?.forEach((r: any) => {
+                    if (r.appointment_id) {
+                        reviewedAppointmentIds.add(r.appointment_id);
+                    } else if (r.created_at) {
+                        // Fallback: store review date (YYYY-MM-DD) for unlinked reviews
+                        reviewDates.add(new Date(r.created_at).toISOString().split('T')[0]);
+                    }
+                });
+
+                if (error) {
+                    console.error('Error checking review eligibility:', error);
+                    return;
+                }
+
+                if (data && data.length > 0) {
+                    // Map the data to a friendlier format
+                    const mappedAppointments = data.map((appt: any) => ({
+                        id: appt.id,
+                        start_time: appt.start_time,
+                        service_name: appt.services?.name || 'Serviço',
+                        professional_name: appt.profiles?.full_name || 'Profissional'
+                    })).filter((appt: any) => {
+                        // Strict ID check
+                        if (reviewedAppointmentIds.has(appt.id)) return false;
+
+                        // Heuristic: If we have an unlinked review on the same day as the appointment, exclude it
+                        // This fixes the issue where legacy/unlinked reviews didn't hide the appointment
+                        const apptDate = new Date(appt.start_time).toISOString().split('T')[0];
+                        if (reviewDates.has(apptDate)) return false;
+
+                        return true;
+                    });
+
+                    setCanReview(true);
+                    setEligibleAppointments(mappedAppointments);
+                    // Select the Most recent one by default
+                    setSelectedReviewAppointment(mappedAppointments[0]);
+                } else {
+                    setCanReview(false);
+                    setEligibleAppointments([]);
+                    setSelectedReviewAppointment(null);
+                }
+            } catch (e) {
+                console.error("Error checking review eligibility:", e);
+                setCanReview(false);
+            }
+        };
+
+        checkReviewEligibility();
+    }, [isClientLoggedIn, company, clientId]);
 
 
 
@@ -868,7 +990,7 @@ export default function PublicCompanyPage() {
                             </nav>
                             {/* Social Links */}
                             {companyLinks && (
-                                <div className="flex items-center gap-3 border-l border-slate-200 pl-6">
+                                <div className="flex items-center gap-3 border-l border-slate-200 pl-6 h-8">
                                     {companyLinks.instagram && (
                                         <a
                                             href={companyLinks.instagram}
@@ -1107,7 +1229,17 @@ export default function PublicCompanyPage() {
                                     {/* Review Form */}
                                     <div className="bg-white rounded-xl p-6 border border-slate-200 mb-6">
                                         <h3 className="font-bold text-slate-900 mb-4">Deixe sua avaliação</h3>
-                                        {reviewSubmitted ? (
+                                        {!canReview ? (
+                                            <div className="text-center py-6 bg-slate-50 rounded-lg">
+                                                <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                    <Lock className="w-6 h-6 text-slate-400" />
+                                                </div>
+                                                <p className="text-slate-900 font-medium mb-1">Avaliação indisponível</p>
+                                                <p className="text-sm text-slate-500 px-4">
+                                                    Para avaliar, você precisa ter pelo menos um agendamento concluído e pago com esta empresa.
+                                                </p>
+                                            </div>
+                                        ) : reviewSubmitted ? (
                                             <div className="text-center py-8">
                                                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                                     <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1130,13 +1262,88 @@ export default function PublicCompanyPage() {
                                                         onChange={(e) => setReviewName(e.target.value)}
                                                         placeholder="Digite seu nome"
                                                         required
-                                                        readOnly={isClientLoggedIn}
-                                                        className={`w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all ${isClientLoggedIn ? 'bg-slate-50 cursor-not-allowed' : ''}`}
+                                                        readOnly={isClientLoggedIn && !!clientName}
+                                                        className={`w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all ${isClientLoggedIn && !!clientName ? 'bg-slate-50 cursor-not-allowed' : ''}`}
                                                     />
                                                     {isClientLoggedIn && (
-                                                        <p className="text-xs text-slate-500 mt-1">
-                                                            ✓ Nome preenchido automaticamente do seu perfil
-                                                        </p>
+                                                        <div className="mt-4 pt-4 border-t border-slate-100">
+                                                            <p className="text-xs text-slate-500 mb-2">
+                                                                ✓ Nome preenchido automaticamente do seu perfil
+                                                            </p>
+
+                                                            {/* Appointment Selector/Display */}
+                                                            {eligibleAppointments.length > 0 && (
+                                                                <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                                                                    <label className="block text-xs font-semibold text-blue-800 mb-1.5 uppercase tracking-wider">
+                                                                        Avaliação referente ao atendimento:
+                                                                    </label>
+
+                                                                    {eligibleAppointments.length > 1 ? (
+                                                                        <div className="relative">
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                                                                                className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 flex items-center justify-between hover:border-blue-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                                                            >
+                                                                                <div className="text-left">
+                                                                                    {selectedReviewAppointment ? (
+                                                                                        <>
+                                                                                            <span className="block font-medium text-slate-900 text-sm">
+                                                                                                {selectedReviewAppointment.service_name}
+                                                                                            </span>
+                                                                                            <span className="block text-xs text-slate-500">
+                                                                                                com {selectedReviewAppointment.professional_name} em {new Date(selectedReviewAppointment.start_time).toLocaleDateString('pt-BR')}
+                                                                                            </span>
+                                                                                        </>
+                                                                                    ) : (
+                                                                                        <span className="text-slate-500 text-sm">Selecione um atendimento</span>
+                                                                                    )}
+                                                                                </div>
+                                                                                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                                                                            </button>
+
+                                                                            {isDropdownOpen && (
+                                                                                <div className="absolute z-10 w-full mt-1 bg-white border border-slate-100 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                                                                    {eligibleAppointments.map((appt) => (
+                                                                                        <button
+                                                                                            key={appt.id}
+                                                                                            type="button"
+                                                                                            onClick={() => {
+                                                                                                setSelectedReviewAppointment(appt);
+                                                                                                setIsDropdownOpen(false);
+                                                                                            }}
+                                                                                            className={`w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 flex items-center justify-between ${selectedReviewAppointment?.id === appt.id ? 'bg-blue-50/50' : ''}`}
+                                                                                        >
+                                                                                            <div>
+                                                                                                <span className={`block text-sm ${selectedReviewAppointment?.id === appt.id ? 'font-semibold text-blue-700' : 'font-medium text-slate-900'}`}>
+                                                                                                    {appt.service_name}
+                                                                                                </span>
+                                                                                                <span className="block text-xs text-slate-500">
+                                                                                                    com {appt.professional_name} ({new Date(appt.start_time).toLocaleDateString('pt-BR')})
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            {selectedReviewAppointment?.id === appt.id && (
+                                                                                                <Check className="w-4 h-4 text-blue-600" />
+                                                                                            )}
+                                                                                        </button>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="flex items-start gap-2 text-sm text-slate-700">
+                                                                            <div className="mt-0.5"><Tag className="w-4 h-4 text-blue-500" /></div>
+                                                                            <div>
+                                                                                <span className="font-semibold block">{selectedReviewAppointment?.service_name}</span>
+                                                                                <span className="text-slate-500 text-xs">
+                                                                                    Com {selectedReviewAppointment?.professional_name} • {selectedReviewAppointment?.start_time ? new Date(selectedReviewAppointment.start_time).toLocaleDateString('pt-BR') : ''}
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     )}
                                                 </div>
 
@@ -1504,15 +1711,10 @@ export default function PublicCompanyPage() {
                                                         <p className="text-sm text-slate-600">{clientPhone || ''}</p>
                                                     </div>
                                                     <button
-                                                        onClick={() => {
-                                                            setIsClientLoggedIn(false);
-                                                            setClientId(null);
-                                                            setClientName('');
-                                                            setClientPhone('');
-                                                            localStorage.removeItem('client_session');
-                                                        }}
-                                                        className="text-xs font-medium text-red-500 hover:text-red-700 hover:underline"
+                                                        onClick={handleLogout}
+                                                        className="text-xs font-medium text-red-500 hover:text-red-700 hover:underline flex items-center gap-1"
                                                     >
+                                                        <LogOut className="w-3 h-3" />
                                                         Sair / Trocar
                                                     </button>
                                                 </div>
@@ -1767,12 +1969,22 @@ export default function PublicCompanyPage() {
                                                     <p className="text-xs text-slate-500 truncate">{clientPhone}</p>
                                                 </div>
                                             </div>
-                                            <a
-                                                href="/client/dashboard"
-                                                className="block w-full text-center py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                                            >
-                                                Ver meu perfil
-                                            </a>
+                                            <div className="flex gap-2 mt-3">
+                                                <a
+                                                    href="/client/dashboard"
+                                                    className="flex-1 text-center py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-2"
+                                                >
+                                                    <User className="w-4 h-4" />
+                                                    Ver perfil
+                                                </a>
+                                                <button
+                                                    onClick={handleLogout}
+                                                    className="px-3 py-2 text-sm font-medium text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="Sair"
+                                                >
+                                                    <LogOut className="w-4 h-4" />
+                                                </button>
+                                            </div>
                                         </div>
                                     ) : (
                                         <div className="text-center pt-2">

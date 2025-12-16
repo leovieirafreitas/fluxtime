@@ -7,30 +7,27 @@ import {
     Clock,
     MapPin,
     User,
-    History,
-    Filter,
-    Edit,
-    Plus,
-    Bold,
-    Italic,
-    Underline,
-    List,
-    ListOrdered,
-    ChevronDown,
-    MoreHorizontal,
-    LayoutList,
-    RefreshCw,
-    CheckCircle2,
-    XCircle,
+    Filter, // Used
+    Edit, // Used
+    Plus, // Used
+    Bold, // Used
+    Italic, // Used
+    Underline, // Used
+    List, // Used
+    ListOrdered, // Used
+    ChevronDown, // Used
+    MoreHorizontal, // Used
+    RefreshCw, // Used
+    CheckCircle2, // Used
+    XCircle, // Used
     RotateCcw,
     Mail,
-    Phone,
-    Info,
     Smartphone,
-    Save,
     Trash2,
     Copy,
-    ExternalLink
+    ExternalLink,
+    Ban,
+    Lock
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import Sidebar from '../components/Sidebar';
@@ -138,6 +135,43 @@ export default function ClientDetails() {
             alert('Erro ao salvar anotações');
         } finally {
             setSavingNotes(false);
+        }
+    };
+
+    const handleEditClient = () => {
+        setActiveTab('info');
+        setOpenMenuId(null);
+    };
+
+    const handleScheduleClient = () => {
+        navigate(`/appointments?action=new&clientId=${id}`);
+    };
+
+    const handleBlockClient = async () => {
+        if (!confirm('Tem certeza que deseja bloquear este cliente?')) return;
+        try {
+            setLoading(true);
+            const { error } = await supabase.from('clients').update({ status: 'blocked' }).eq('id', id);
+            if (error) throw error;
+            fetchClientData();
+        } catch (error) {
+            console.error('Error blocking client:', error);
+            alert('Erro ao bloquear cliente (verifique se o campo status existe)');
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteClient = async () => {
+        if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
+        try {
+            setLoading(true);
+            const { error } = await supabase.from('clients').delete().eq('id', id);
+            if (error) throw error;
+            navigate('/clients');
+        } catch (error) {
+            console.error('Error deleting client:', error);
+            alert('Erro ao excluir cliente');
+            setLoading(false);
         }
     };
 
@@ -254,10 +288,47 @@ export default function ClientDetails() {
                                     <span>/</span>
                                     <span className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{client.name}</span>
                                 </div>
-                                <button className={`px-3 py-1.5 border rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${theme === 'dark' ? 'border-neutral-800 text-slate-300 hover:bg-neutral-900' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                                    Ações
-                                    <ChevronDown className="w-4 h-4" />
-                                </button>
+                                <div className="relative actions-menu-container">
+                                    <button
+                                        onClick={() => setOpenMenuId(openMenuId === 'header-actions' ? null : 'header-actions')}
+                                        className={`px-3 py-1.5 border rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${theme === 'dark' ? 'border-neutral-800 text-slate-300 hover:bg-neutral-900' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                                    >
+                                        Ações
+                                        <ChevronDown className="w-4 h-4" />
+                                    </button>
+
+                                    {openMenuId === 'header-actions' && (
+                                        <div className={`absolute right-0 top-full mt-2 w-56 rounded-xl border shadow-xl z-50 overflow-hidden ${theme === 'dark' ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-slate-200'}`}>
+                                            <div className="p-1.5 flex flex-col gap-0.5">
+                                                <button onClick={handleEditClient} className={`w-full flex items-center gap-2 px-2 py-2 text-sm font-medium rounded-lg transition-colors ${theme === 'dark' ? 'text-slate-300 hover:bg-neutral-800' : 'text-slate-700 hover:bg-slate-50'}`}>
+                                                    <Edit className="w-4 h-4 text-slate-500" />
+                                                    Editar
+                                                </button>
+                                                <button onClick={handleScheduleClient} className={`w-full flex items-center gap-2 px-2 py-2 text-sm font-medium rounded-lg transition-colors ${theme === 'dark' ? 'text-slate-300 hover:bg-neutral-800' : 'text-slate-700 hover:bg-slate-50'}`}>
+                                                    <Calendar className="w-4 h-4 text-slate-500" />
+                                                    Agendar
+                                                </button>
+                                                <button onClick={handleBlockClient} className={`w-full flex items-center justify-between px-2 py-2 text-sm font-medium rounded-lg transition-colors ${theme === 'dark' ? 'text-slate-300 hover:bg-neutral-800' : 'text-slate-700 hover:bg-slate-50'}`}>
+                                                    <div className="flex items-center gap-2">
+                                                        <Ban className="w-4 h-4 text-slate-500" />
+                                                        Bloquear
+                                                    </div>
+                                                    <span className="flex items-center gap-1 bg-purple-100 text-purple-700 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">
+                                                        <Lock className="w-3 h-3" />
+                                                        Essencial
+                                                    </span>
+                                                </button>
+                                            </div>
+                                            <div className={`h-px mx-1.5 ${theme === 'dark' ? 'bg-neutral-800' : 'bg-slate-100'}`} />
+                                            <div className="p-1.5">
+                                                <button onClick={handleDeleteClient} className={`w-full flex items-center gap-2 px-2 py-2 text-sm font-medium rounded-lg transition-colors text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20`}>
+                                                    <Trash2 className="w-4 h-4" />
+                                                    Excluir
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Tabs Row - MATCHING REFERENCE IMAGE */}
@@ -298,235 +369,239 @@ export default function ClientDetails() {
                                 </div>
 
                                 {/* Timeline Scroll Area */}
-                                <div ref={scrollRef} className="flex-1 overflow-y-auto px-8 relative pt-2 pb-4 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-neutral-800">
-                                    {/* Vertical Line */}
-                                    <div className={`absolute left-[70px] top-6 bottom-0 w-[1px] ${theme === 'dark' ? 'bg-neutral-800' : 'bg-slate-200'} pointer-events-none`} />
+                                <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 relative pt-2 pb-4 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-neutral-800">
+                                    <div className="max-w-2xl mx-auto relative min-h-full">
+                                        {/* Vertical Line */}
+                                        <div className={`absolute left-[70px] top-6 bottom-0 w-[1px] ${theme === 'dark' ? 'bg-neutral-800' : 'bg-slate-200'} pointer-events-none`} />
 
-                                    {timelineEvents.map((event, index) => {
-                                        const isToday = new Date(event.date).toDateString() === new Date().toDateString();
-                                        const dateLabel = isToday ? `Hoje, ${formatDateFull(event.date)}` : `${timeAgo(event.date)}, ${formatDateFull(event.date)}`;
+                                        {timelineEvents.map((event, index) => {
+                                            const isToday = new Date(event.date).toDateString() === new Date().toDateString();
+                                            const dateLabel = isToday ? `Hoje, ${formatDateFull(event.date)}` : `${timeAgo(event.date)}, ${formatDateFull(event.date)}`;
 
-                                        const prevEvent = index > 0 ? timelineEvents[index - 1] : null;
-                                        const showDateLabel = !prevEvent || new Date(prevEvent.date).toDateString() !== new Date(event.date).toDateString();
+                                            const prevEvent = index > 0 ? timelineEvents[index - 1] : null;
+                                            const showDateLabel = !prevEvent || new Date(prevEvent.date).toDateString() !== new Date(event.date).toDateString();
 
-                                        return (
-                                            <div key={`${event.type}-${index}`} className="relative mb-2">
+                                            return (
+                                                <div key={`${event.type}-${index}`} className="relative mb-2">
 
-                                                {/* Date Label Header */}
-                                                {showDateLabel && (
-                                                    <div className="flex items-center gap-3 mb-6 mt-4">
-                                                        <div className="w-[70px] flex justify-end pr-6 relative">
-                                                            <div className={`absolute right-[-4.5px] top-1.5 w-2.5 h-2.5 rounded-full bg-blue-600 z-10 border-2 ${theme === 'dark' ? 'border-black' : 'border-white'}`} />
+                                                    {/* Date Label Header */}
+                                                    {showDateLabel && (
+                                                        <div className="flex items-center gap-3 mb-6 mt-4">
+                                                            <div className="w-[70px] flex justify-end pr-6 relative">
+                                                                <div className={`absolute right-[-4.5px] top-1.5 w-2.5 h-2.5 rounded-full bg-blue-600 z-10 border-2 ${theme === 'dark' ? 'border-black' : 'border-white'}`} />
+                                                            </div>
+                                                            <h3 className={`text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-neutral-500' : 'text-slate-500'}`}>
+                                                                <span className={`${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'} mr-2`}>•</span>
+                                                                {dateLabel}
+                                                            </h3>
                                                         </div>
-                                                        <h3 className={`text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-neutral-500' : 'text-slate-500'}`}>
-                                                            <span className={`${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'} mr-2`}>•</span>
-                                                            {dateLabel}
-                                                        </h3>
-                                                    </div>
-                                                )}
+                                                    )}
 
-                                                {event.type === 'appointment' ? (
-                                                    <div className="flex w-full group">
-                                                        {/* Left Column (Time) */}
-                                                        <div className="w-[70px] pt-1 pr-6 text-right relative flex-none">
-                                                            <span className="text-xs font-mono text-slate-400 font-medium">{formatTime(event.data.start_time)}</span>
-                                                            {/* Icon on line */}
-                                                            <div className={`absolute right-[-8px] top-1 w-4 h-4 rounded-full border-2 flex items-center justify-center z-10 
+                                                    {event.type === 'appointment' ? (
+                                                        <div className="flex w-full group">
+                                                            {/* Left Column (Time) */}
+                                                            <div className="w-[70px] pt-1 pr-6 text-right relative flex-none">
+                                                                <span className="text-xs font-mono text-slate-400 font-medium">{formatTime(event.data.start_time)}</span>
+                                                                {/* Icon on line */}
+                                                                <div className={`absolute right-[-8px] top-1 w-4 h-4 rounded-full border-2 flex items-center justify-center z-10 
                                                                 ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-100'} 
                                                             `}>
-                                                                {event.data.status === 'confirmed' ? (
-                                                                    <RefreshCw className="w-2.5 h-2.5 text-blue-500" />
-                                                                ) : event.data.status === 'completed' ? (
-                                                                    <CheckCircle2 className="w-2.5 h-2.5 text-green-500" />
-                                                                ) : (
-                                                                    <XCircle className="w-2.5 h-2.5 text-red-500" />
-                                                                )}
+                                                                    {event.data.status === 'confirmed' ? (
+                                                                        <RefreshCw className="w-2.5 h-2.5 text-blue-500" />
+                                                                    ) : event.data.status === 'completed' ? (
+                                                                        <CheckCircle2 className="w-2.5 h-2.5 text-green-500" />
+                                                                    ) : (
+                                                                        <XCircle className="w-2.5 h-2.5 text-red-500" />
+                                                                    )}
+                                                                </div>
                                                             </div>
-                                                        </div>
 
-                                                        {/* Right Column (Content) */}
-                                                        <div className="flex-1 pb-8">
-                                                            {/* Branch Line */}
-                                                            <div className="relative pl-6">
-                                                                <div className={`absolute left-[-17px] top-[-11px] w-6 h-8 border-b border-l rounded-bl-2xl pointer-events-none ${theme === 'dark' ? 'border-neutral-800' : 'border-slate-200'}`} />
+                                                            {/* Right Column (Content) */}
+                                                            <div className="flex-1 pb-8">
+                                                                {/* Branch Line */}
+                                                                <div className="relative pl-6">
+                                                                    <div className={`absolute left-[-17px] top-[-11px] w-6 h-8 border-b border-l rounded-bl-2xl pointer-events-none ${theme === 'dark' ? 'border-neutral-800' : 'border-slate-200'}`} />
 
-                                                                {/* Badge Header Row */}
-                                                                <div className="flex items-center gap-3 mb-3">
-                                                                    <span className={`font-bold text-sm ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-                                                                        {event.data.status === 'confirmed' ? 'Atendimento' : 'Agendamento'}
-                                                                    </span>
+                                                                    {/* Badge Header Row */}
+                                                                    <div className="flex items-center gap-3 mb-3">
+                                                                        <span className={`font-bold text-sm ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                                                                            {event.data.status === 'confirmed' ? 'Atendimento' : 'Agendamento'}
+                                                                        </span>
 
-                                                                    {event.data.status === 'completed' ? (
-                                                                        <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-green-100 text-green-700">Finalizado</span>
-                                                                    ) : event.data.status === 'confirmed' ? (
-                                                                        <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-green-100 text-green-700">Confirmado</span>
-                                                                    ) : event.data.status === 'cancelled' ? (
-                                                                        <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-red-100 text-red-700">Cancelado</span>
-                                                                    ) : (
-                                                                        <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-blue-100 text-blue-700">Agendado</span>
-                                                                    )}
+                                                                        {event.data.status === 'completed' ? (
+                                                                            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-green-100 text-green-700">Finalizado</span>
+                                                                        ) : event.data.status === 'confirmed' ? (
+                                                                            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-green-100 text-green-700">Confirmado</span>
+                                                                        ) : event.data.status === 'cancelled' ? (
+                                                                            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-red-100 text-red-700">Cancelado</span>
+                                                                        ) : (
+                                                                            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-blue-100 text-blue-700">Agendado</span>
+                                                                        )}
 
-                                                                    {event.data.payment_status === 'paid' ? (
-                                                                        <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-green-100 text-green-700">Pago</span>
-                                                                    ) : (
-                                                                        <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-red-100 text-red-700">Não pago</span>
-                                                                    )}
+                                                                        {event.data.payment_status === 'paid' ? (
+                                                                            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-green-100 text-green-700">Pago</span>
+                                                                        ) : (
+                                                                            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-red-100 text-red-700">Não pago</span>
+                                                                        )}
 
-                                                                    <div className="ml-auto relative actions-menu-container">
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                setOpenMenuId(openMenuId === event.data.id ? null : event.data.id);
-                                                                            }}
-                                                                            className={`px-2 py-1 text-xs font-medium border rounded-md flex items-center gap-1 shadow-sm transition-colors 
+                                                                        <div className="ml-auto relative actions-menu-container">
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setOpenMenuId(openMenuId === event.data.id ? null : event.data.id);
+                                                                                }}
+                                                                                className={`px-2 py-1 text-xs font-medium border rounded-md flex items-center gap-1 shadow-sm transition-colors 
                                                                         ${theme === 'dark' ? 'bg-black border-neutral-800 text-slate-300 hover:bg-neutral-900' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}
                                                                     `}
-                                                                        >
-                                                                            Ações <ChevronDown className="w-3 h-3 text-slate-400" />
-                                                                        </button>
+                                                                            >
+                                                                                Ações <ChevronDown className="w-3 h-3 text-slate-400" />
+                                                                            </button>
 
-                                                                        {/* Dropdown Menu */}
-                                                                        {openMenuId === event.data.id && (
-                                                                            <div className={`absolute right-0 top-full mt-1 w-56 z-50 rounded-lg shadow-lg border overflow-hidden ${theme === 'dark' ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-slate-200'}`}>
-                                                                                <div className="py-1">
-                                                                                    <button
-                                                                                        onClick={() => {
-                                                                                            navigator.clipboard.writeText(`${window.location.origin}/agendamentos/${event.data.id}`);
-                                                                                            setOpenMenuId(null);
-                                                                                            // Ideally show a toast here
-                                                                                        }}
-                                                                                        className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-neutral-800 transition-colors ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}
-                                                                                    >
-                                                                                        <Copy className="w-4 h-4 text-slate-400" />
-                                                                                        Copiar link para cliente
-                                                                                    </button>
-                                                                                    <button
-                                                                                        onClick={() => {
-                                                                                            navigate(`/agendamentos/${event.data.id}`);
-                                                                                            setOpenMenuId(null);
-                                                                                        }}
-                                                                                        className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-neutral-800 transition-colors ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}
-                                                                                    >
-                                                                                        <ExternalLink className="w-4 h-4 text-slate-400" />
-                                                                                        Ir para agendamento
-                                                                                    </button>
+                                                                            {/* Dropdown Menu */}
+                                                                            {openMenuId === event.data.id && (
+                                                                                <div className={`absolute right-0 top-full mt-1 w-56 z-50 rounded-lg shadow-lg border overflow-hidden ${theme === 'dark' ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-slate-200'}`}>
+                                                                                    <div className="py-1">
+                                                                                        <button
+                                                                                            onClick={() => {
+                                                                                                navigator.clipboard.writeText(`${window.location.origin}/client/dashboard?appointmentId=${event.data.id}`);
+                                                                                                setOpenMenuId(null);
+                                                                                                // Ideally show a toast here
+                                                                                            }}
+                                                                                            className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-neutral-800 transition-colors ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}
+                                                                                        >
+                                                                                            <Copy className="w-4 h-4 text-slate-400" />
+                                                                                            Copiar link para cliente
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => {
+                                                                                                setSelectedAppointment(event.data);
+                                                                                                setIsSlideOverOpen(true);
+                                                                                                setOpenMenuId(null);
+                                                                                            }}
+                                                                                            className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-neutral-800 transition-colors ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}
+                                                                                        >
+                                                                                            <ExternalLink className="w-4 h-4 text-slate-400" />
+                                                                                            Ir para agendamento
+                                                                                        </button>
+                                                                                    </div>
                                                                                 </div>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-
-                                                                {/* Main Content Card */}
-                                                                <div className={`rounded-2xl border p-3 hover:shadow-sm transition-all ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-200'}`}>
-                                                                    <div className="flex items-center justify-between">
-                                                                        <div className="flex items-center gap-4">
-                                                                            {/* Date Box */}
-                                                                            <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl border ${theme === 'dark' ? 'bg-neutral-900 border-neutral-800 text-white' : 'bg-slate-50 border-slate-100 text-slate-700'}`}>
-                                                                                <span className="text-[10px] uppercase font-bold text-blue-500">{getMonthAbbr(event.data.start_time)}</span>
-                                                                                <span className="text-xl font-bold leading-none">{getDay(event.data.start_time)}</span>
-                                                                            </div>
-
-                                                                            <div>
-                                                                                <h4 className={`font-bold text-sm ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{event.data.service?.name}</h4>
-                                                                                <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
-                                                                                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatTime(event.data.start_time)} &rarr; {formatTime(event.data.end_time)}</span>
-                                                                                    <span className="flex items-center gap-1 opacity-70"><MapPin className="w-3 h-3" /> Em meu estabelecimento</span>
-                                                                                </div>
-                                                                            </div>
+                                                                            )}
                                                                         </div>
+                                                                    </div>
 
-                                                                        {/* Professional Avatar */}
-                                                                        {event.data.professional && (
-                                                                            <div className={`flex items-center gap-2 pr-2`}>
-                                                                                <div className={`w-8 h-8 rounded-full overflow-hidden border ${theme === 'dark' ? 'border-neutral-800' : 'border-slate-200'}`}>
-                                                                                    {event.data.professional.avatar_url ? (
-                                                                                        <img src={event.data.professional.avatar_url} className="w-full h-full object-cover" />
-                                                                                    ) : (
-                                                                                        <div className={`w-full h-full ${theme === 'dark' ? 'bg-neutral-800' : 'bg-slate-200'} flex items-center justify-center text-xs font-bold`}>
-                                                                                            {event.data.professional.full_name.charAt(0)}
-                                                                                        </div>
-                                                                                    )}
+                                                                    {/* Main Content Card */}
+                                                                    <div className={`rounded-2xl border p-3 hover:shadow-sm transition-all ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-200'}`}>
+                                                                        <div className="flex items-center justify-between">
+                                                                            <div className="flex items-center gap-4">
+                                                                                {/* Date Box */}
+                                                                                <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl border ${theme === 'dark' ? 'bg-neutral-900 border-neutral-800 text-white' : 'bg-slate-50 border-slate-100 text-slate-700'}`}>
+                                                                                    <span className="text-[10px] uppercase font-bold text-blue-500">{getMonthAbbr(event.data.start_time)}</span>
+                                                                                    <span className="text-xl font-bold leading-none">{getDay(event.data.start_time)}</span>
                                                                                 </div>
-                                                                                <span className={`text-xs font-medium hidden sm:block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>{event.data.professional.full_name}</span>
+
+                                                                                <div>
+                                                                                    <h4 className={`font-bold text-sm ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{event.data.service?.name}</h4>
+                                                                                    <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                                                                                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatTime(event.data.start_time)} &rarr; {formatTime(event.data.end_time)}</span>
+                                                                                        <span className="flex items-center gap-1 opacity-70"><MapPin className="w-3 h-3" /> Em meu estabelecimento</span>
+                                                                                    </div>
+                                                                                </div>
                                                                             </div>
-                                                                        )}
+
+                                                                            {/* Professional Avatar */}
+                                                                            {event.data.professional && (
+                                                                                <div className={`flex items-center gap-2 pr-2`}>
+                                                                                    <div className={`w-8 h-8 rounded-full overflow-hidden border ${theme === 'dark' ? 'border-neutral-800' : 'border-slate-200'}`}>
+                                                                                        {event.data.professional.avatar_url ? (
+                                                                                            <img src={event.data.professional.avatar_url} className="w-full h-full object-cover" />
+                                                                                        ) : (
+                                                                                            <div className={`w-full h-full ${theme === 'dark' ? 'bg-neutral-800' : 'bg-slate-200'} flex items-center justify-center text-xs font-bold`}>
+                                                                                                {event.data.professional.full_name.charAt(0)}
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <span className={`text-xs font-medium hidden sm:block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>{event.data.professional.full_name}</span>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                ) : (
-                                                    /* CREATION EVENT */
-                                                    <div className="flex w-full mt-2 mb-6 items-center">
-                                                        <div className="w-[70px] pr-6 text-right text-xs text-slate-400 font-mono relative">
-                                                            {formatTime(event.date)}
-                                                        </div>
+                                                    ) : (
+                                                        /* CREATION EVENT */
+                                                        <div className="flex w-full mt-2 mb-6 items-center">
+                                                            <div className="w-[70px] pr-6 text-right text-xs text-slate-400 font-mono relative">
+                                                                {formatTime(event.date)}
+                                                            </div>
 
-                                                        <div className="relative flex-1 flex items-center pl-6">
-                                                            {/* Simple Creation Dot */}
-                                                            <div className={`absolute left-[-5px] top-1.5 w-2.5 h-2.5 rounded-full z-10 ${theme === 'dark' ? 'bg-neutral-600' : 'bg-slate-300'}`} />
+                                                            <div className="relative flex-1 flex items-center pl-6">
+                                                                {/* Simple Creation Dot */}
+                                                                <div className={`absolute left-[-5px] top-1.5 w-2.5 h-2.5 rounded-full z-10 ${theme === 'dark' ? 'bg-neutral-600' : 'bg-slate-300'}`} />
 
-                                                            <div className="text-sm flex items-center gap-2">
-                                                                <div className={`w-6 h-6 rounded-full overflow-hidden border flex items-center justify-center ${theme === 'dark' ? 'border-neutral-800 bg-neutral-800' : 'border-slate-200 bg-slate-200'}`}>
-                                                                    {profile?.companies?.logo_url ? (
-                                                                        <img src={profile.companies.logo_url} className="w-full h-full object-cover" alt="Company Logo" />
-                                                                    ) : (
-                                                                        <span className="text-[10px] font-bold text-slate-500">{profile?.companies?.name?.[0] || 'E'}</span>
-                                                                    )}
+                                                                <div className="text-sm flex items-center gap-2">
+                                                                    <div className={`w-6 h-6 rounded-full overflow-hidden border flex items-center justify-center ${theme === 'dark' ? 'border-neutral-800 bg-neutral-800' : 'border-slate-200 bg-slate-200'}`}>
+                                                                        {profile?.companies?.logo_url ? (
+                                                                            <img src={profile.companies.logo_url} className="w-full h-full object-cover" alt="Company Logo" />
+                                                                        ) : (
+                                                                            <span className="text-[10px] font-bold text-slate-500">{profile?.companies?.name?.[0] || 'E'}</span>
+                                                                        )}
+                                                                    </div>
+                                                                    <span className={`${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                                                                        <span className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Você</span> criou o cliente
+                                                                    </span>
                                                                 </div>
-                                                                <span className={`${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                                                                    <span className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Você</span> criou o cliente
-                                                                </span>
                                                             </div>
                                                         </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+
+                                        {/* "AGORA" SECTION */}
+                                        <div className="relative pb-8 mt-2">
+                                            <div className="flex w-full items-start">
+                                                <div className="w-[70px] pr-6 text-right text-xs text-slate-400 font-mono pt-3">
+                                                    Agora
+                                                </div>
+                                                <div className="relative pl-6">
+                                                    <div className={`absolute left-[-8.5px] top-3 w-4 h-4 rounded-full border-2 flex items-center justify-center z-10 ${theme === 'dark' ? 'bg-black border-neutral-700' : 'bg-white border-slate-300'}`}>
+                                                        <Plus className="w-2.5 h-2.5 text-slate-500" />
                                                     </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
 
-                                    {/* "AGORA" SECTION */}
-                                    <div className="relative pb-8 mt-2">
-                                        <div className="flex w-full items-start">
-                                            <div className="w-[70px] pr-6 text-right text-xs text-slate-400 font-mono pt-3">
-                                                Agora
-                                            </div>
-                                            <div className="relative pl-6">
-                                                <div className={`absolute left-[-8.5px] top-3 w-4 h-4 rounded-full border-2 flex items-center justify-center z-10 ${theme === 'dark' ? 'bg-black border-neutral-700' : 'bg-white border-slate-300'}`}>
-                                                    <Plus className="w-2.5 h-2.5 text-slate-500" />
-                                                </div>
+                                                    <div className="flex items-center gap-2 mb-6 mt-2 ml-4">
+                                                        <span className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Comece aqui</span>
+                                                    </div>
 
-                                                <div className="flex items-center gap-2 mb-6 mt-2 ml-4">
-                                                    <span className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Comece aqui</span>
-                                                </div>
+                                                    <div className="flex gap-4 ml-4">
+                                                        <button onClick={handleScheduleClient} className={`w-32 h-24 rounded-2xl border shadow-sm flex flex-col items-center justify-center gap-3 transition-all hover:border-blue-500 hover:shadow-md group ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-200'}`}>
+                                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform ${theme === 'dark' ? 'bg-blue-900/20 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
+                                                                <Calendar className="w-5 h-5" />
+                                                            </div>
+                                                            <span className={`text-sm font-semibold ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Agendar</span>
+                                                        </button>
 
-                                                <div className="flex gap-4 ml-4">
-                                                    <button className={`w-32 h-24 rounded-2xl border shadow-sm flex flex-col items-center justify-center gap-3 transition-all hover:border-blue-500 hover:shadow-md group ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-200'}`}>
-                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform ${theme === 'dark' ? 'bg-blue-900/20 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
-                                                            <Calendar className="w-5 h-5" />
-                                                        </div>
-                                                        <span className={`text-sm font-semibold ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Agendar</span>
-                                                    </button>
-
-                                                    <button className={`w-32 h-24 rounded-2xl border shadow-sm flex flex-col items-center justify-center gap-3 transition-all hover:border-blue-500 hover:shadow-md group ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-200'}`}>
-                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform ${theme === 'dark' ? 'bg-blue-900/20 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
-                                                            <Edit className="w-5 h-5" />
-                                                        </div>
-                                                        <span className={`text-sm font-semibold ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Editar</span>
-                                                    </button>
+                                                        <button onClick={handleEditClient} className={`w-32 h-24 rounded-2xl border shadow-sm flex flex-col items-center justify-center gap-3 transition-all hover:border-blue-500 hover:shadow-md group ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-200'}`}>
+                                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform ${theme === 'dark' ? 'bg-blue-900/20 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
+                                                                <Edit className="w-5 h-5" />
+                                                            </div>
+                                                            <span className={`text-sm font-semibold ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Editar</span>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
 
+                                    </div>
                                 </div>
 
                                 {/* Notes Section at bottom */}
+                                {/* Notes Section at bottom */}
                                 <div className={`p-6 border-t flex-none ${theme === 'dark' ? 'border-neutral-800' : 'border-slate-100'}`}>
-                                    <div className={`rounded-xl border overflow-hidden transition-all shadow-sm ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-200'}`}>
+                                    <div className={`max-w-2xl mx-auto rounded-xl border overflow-hidden transition-all shadow-sm ${theme === 'dark' ? 'bg-black border-neutral-800' : 'bg-white border-slate-200'}`}>
 
                                         {/* Toolbar */}
-                                        <div className={`px-4 py-3 border-b flex items-center justify-between ${theme === 'dark' ? 'border-neutral-800' : 'border-slate-100'}`}>
+                                        <div className={`px-3 py-2 border-b flex items-center justify-between ${theme === 'dark' ? 'border-neutral-800' : 'border-slate-100'}`}>
                                             <div className="flex items-center gap-1">
                                                 <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><Bold className="w-3.5 h-3.5" /></button>
                                                 <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><Italic className="w-3.5 h-3.5" /></button>
@@ -545,31 +620,18 @@ export default function ClientDetails() {
                                             </div>
                                         </div>
 
-                                        {/* Text Area */}
-                                        <div className="p-4 relative">
+                                        <div className="p-3 relative">
                                             <textarea
-                                                placeholder="Anotações é uma funcionalidade do plano Avançado"
+                                                placeholder="Escreva uma anotação..."
                                                 className={`w-full bg-transparent resize-none outline-none text-sm leading-relaxed ${theme === 'dark' ? 'text-slate-300 placeholder:text-neutral-600' : 'text-slate-700 placeholder:text-slate-400'}`}
                                                 value={notes}
                                                 onChange={(e) => setNotes(e.target.value)}
-                                                rows={4}
+                                                rows={2}
                                             />
-                                            {/* Optional: Add the "Avançado" badge if strictly following the visual of the lock, but user might want editable. Keeping it editable but with placeholder like image. */}
-                                            {notes === '' && (
-                                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                    <div className="flex flex-col items-center gap-2">
-                                                        <span className="text-sm text-slate-500">Anotações é uma funcionalidade do plano</span>
-                                                        <span className="bg-orange-100 text-orange-600 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1">
-                                                            <div className="w-2 h-2 rounded-full bg-orange-500" />
-                                                            Avançado
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            )}
                                         </div>
 
                                         {/* Bottom Actions */}
-                                        <div className={`px-4 py-2 border-t flex justify-between items-center ${theme === 'dark' ? 'border-neutral-800 bg-neutral-900/30' : 'border-slate-50 bg-slate-50/50'}`}>
+                                        <div className={`px-3 py-2 border-t flex justify-between items-center ${theme === 'dark' ? 'border-neutral-800 bg-neutral-900/30' : 'border-slate-50 bg-slate-50/50'}`}>
                                             <button className="p-1 rounded hover:bg-slate-100 dark:hover:bg-neutral-800 transition-colors text-slate-400">
                                                 <Plus className="w-4 h-4" />
                                             </button>

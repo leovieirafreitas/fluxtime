@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { whatsappService } from '../services/whatsapp';
 import { supabase } from '../lib/supabase';
 import OTPInput from '../components/OTPInput';
+import { saveClientSession } from '../lib/clientSession';
+import { ShieldCheck } from 'lucide-react';
 
 export default function ClientLogin() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [phone, setPhone] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [showOtpInput, setShowOtpInput] = useState(false);
@@ -78,7 +81,9 @@ export default function ClientLogin() {
 
     const handleVerifyCode = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (otp !== generatedOtp && otp !== '000000') { // 000000 backdoor for dev
+
+        // Security check
+        if (otp !== generatedOtp) {
             setError('Código incorreto.');
             return;
         }
@@ -94,13 +99,19 @@ export default function ClientLogin() {
                 .maybeSingle<any>();
 
             if (data && !error) {
-                // Login directly
-                localStorage.setItem('client_session', JSON.stringify({
+                // Login directly (Secure Session)
+                saveClientSession({
                     phone: normalizedPhone,
                     name: data.name || '',
                     email: data.email || ''
-                }));
-                navigate('/client/dashboard');
+                });
+
+                const appointmentId = searchParams.get('appointmentId');
+                if (appointmentId) {
+                    navigate(`/client/dashboard?appointmentId=${appointmentId}`);
+                } else {
+                    navigate('/client/dashboard');
+                }
             } else {
                 // Does not exist -> Show registration form
                 setShowRegisterForm(true);
@@ -131,13 +142,19 @@ export default function ClientLogin() {
 
             if (error) throw error;
 
-            // Login
-            localStorage.setItem('client_session', JSON.stringify({
+            // Login (Secure Session)
+            saveClientSession({
                 phone: normalizedPhone,
                 name: name,
                 email: email
-            }));
-            navigate('/client/dashboard');
+            });
+
+            const appointmentId = searchParams.get('appointmentId');
+            if (appointmentId) {
+                navigate(`/client/dashboard?appointmentId=${appointmentId}`);
+            } else {
+                navigate('/client/dashboard');
+            }
 
         } catch (err) {
             console.error(err);
@@ -320,8 +337,14 @@ export default function ClientLogin() {
                     </form>
                 )}
 
-                <div className="mt-6 text-center text-xs text-slate-400">
-                    Ao continuar, você concorda com nossos <a href="#" className="text-blue-600 hover:underline">Termos de Uso</a> e <a href="#" className="text-blue-600 hover:underline">Política de Privacidade</a>.
+                <div className="mt-6 flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-1.5 text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
+                        <ShieldCheck className="w-4 h-4" />
+                        <span className="text-xs font-semibold">Ambiente Verificado e Seguro</span>
+                    </div>
+                    <div className="text-center text-xs text-slate-400 mt-2">
+                        Ao continuar, você concorda com nossos <a href="#" className="text-blue-600 hover:underline">Termos de Uso</a> e <a href="#" className="text-blue-600 hover:underline">Política de Privacidade</a>.
+                    </div>
                 </div>
             </div>
         </div>
