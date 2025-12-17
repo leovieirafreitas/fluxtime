@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, ChevronRight, Check, DollarSign, Edit, Trash2, Clock } from 'lucide-react';
+import { X, ChevronRight, Check, DollarSign, Edit, Trash2, Clock, CreditCard } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import DefaultClientAvatar from './DefaultClientAvatar';
@@ -25,14 +25,39 @@ export default function AppointmentDetailsSlideOver({
     const [isClosing, setIsClosing] = useState(false);
     const [loading, setLoading] = useState(false);
     const [showActions, setShowActions] = useState(false);
+    const [hasInfinitePay, setHasInfinitePay] = useState(false);
 
     // Reset when opening/changing appointment
     useEffect(() => {
         if (isOpen) {
             setIsClosing(false);
             setShowActions(false);
+            if (appointment?.company_id) {
+                checkPaymentIntegration();
+            }
         }
     }, [isOpen, appointment]);
+
+    const checkPaymentIntegration = async () => {
+        try {
+            const { data } = await supabase
+                .from('company_payment_integrations')
+                .select('id, is_active')
+                .eq('company_id', appointment.company_id)
+                .eq('provider', 'infinitepay')
+                .eq('is_active', true)
+                .single();
+
+            if (data) {
+                setHasInfinitePay(true);
+            } else {
+                setHasInfinitePay(false);
+            }
+        } catch (err) {
+            console.error('Error checking integration:', err);
+            setHasInfinitePay(false);
+        }
+    };
 
     const handleClose = () => {
         setIsClosing(true);
@@ -115,6 +140,32 @@ export default function AppointmentDetailsSlideOver({
         } catch (error) {
             console.error('Error updating payment:', error);
             alert('Erro ao atualizar pagamento.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleGeneratePaymentLink = async () => {
+        setLoading(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('create-infinitepay-link', {
+                body: {
+                    appointmentId: appointment.id,
+                    origin: window.location.origin
+                }
+            });
+
+            if (error) throw error;
+
+            if (data?.url) {
+                window.location.href = data.url;
+            } else {
+                alert('Erro ao gerar link de pagamento. Tente novamente.');
+            }
+
+        } catch (error) {
+            console.error('Error generating link:', error);
+            alert('Erro ao conectar com InfinitePay. Verifique se a integração está ativa.');
         } finally {
             setLoading(false);
         }
@@ -359,12 +410,21 @@ export default function AppointmentDetailsSlideOver({
                     >
                         {isPaid ? 'Marcar como não pago' : 'Marcar como pago'}
                     </button>
-                    <button
-                        className="flex-1 py-2.5 rounded-xl font-semibold text-sm bg-slate-200 text-slate-500 cursor-not-allowed"
-                        title="Funcionalidade em desenvolvimento"
-                    >
-                        Cobrar
-                    </button>
+                    {!isPaid && (
+                        <button
+                            onClick={handleGeneratePaymentLink}
+                            disabled={loading || !hasInfinitePay}
+                            className={`flex-1 py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2
+                                ${hasInfinitePay && !loading
+                                    ? 'bg-gradient-to-r from-[#00EE26] to-[#FFC600] text-slate-900 hover:opacity-90 shadow-sm'
+                                    : 'bg-slate-200 text-slate-500 cursor-not-allowed'}
+                            `}
+                            title={hasInfinitePay ? "Gerar link de pagamento InfinitePay" : "Integração InfinitePay não configurada"}
+                        >
+                            <CreditCard className="w-4 h-4" />
+                            Cobrar agora
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

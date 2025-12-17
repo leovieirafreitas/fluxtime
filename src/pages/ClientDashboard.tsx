@@ -162,6 +162,61 @@ export default function ClientDashboard() {
         fetchDashboardData();
     }, [navigate]);
 
+    // Check for payment success via URL parameters from InfinitePay
+    useEffect(() => {
+        const transactionNsu = searchParams.get('transaction_nsu');
+        const orderNsu = searchParams.get('order_nsu');
+        const paymentSuccess = searchParams.get('payment_success');
+
+        const confirmPayment = async () => {
+            if (transactionNsu && orderNsu) {
+                try {
+                    // Call RPC to confirm payment on backend (Client-side confirmation fallback)
+                    const { error } = await supabase.rpc('client_mark_appointment_paid', {
+                        p_appointment_id: orderNsu,
+                        p_transaction_id: transactionNsu
+                    });
+
+                    if (error) {
+                        console.error('Error marking appointment paid:', error);
+                        // We continue to show success to user if it fails (maybe already paid via webhook)
+                    }
+
+                    alert('Pagamento processado com sucesso! 🎉');
+
+                    // Cleanup URL
+                    const newParams = new URLSearchParams(searchParams);
+                    newParams.delete('transaction_nsu');
+                    newParams.delete('transaction_id');
+                    newParams.delete('order_nsu');
+                    newParams.delete('capture_method');
+                    newParams.delete('slug');
+                    newParams.delete('payment_success'); // Cleanup legacy param too
+
+                    navigate(`/client/dashboard?${newParams.toString()}`, { replace: true });
+
+                    // Trigger refresh
+                    setIsLoading(true);
+                    window.location.reload();
+
+                } catch (err) {
+                    console.error('Processing payment return error:', err);
+                }
+            } else if (paymentSuccess === 'true') {
+                // Fallback for legacy generic success flag
+                alert('Pagamento verificado! 🎉');
+                const newParams = new URLSearchParams(searchParams);
+                newParams.delete('payment_success');
+                navigate(`/client/dashboard?${newParams.toString()}`, { replace: true });
+                window.location.reload();
+            }
+        };
+
+        if (transactionNsu || paymentSuccess === 'true') {
+            confirmPayment();
+        }
+    }, [searchParams, navigate]);
+
     const handleLogout = () => {
         clearClientSession();
         navigate('/client');
@@ -224,6 +279,40 @@ export default function ClientDashboard() {
         } catch (err: any) {
             console.error('Error confirming:', err);
             alert(`Erro ao confirmar agendamento: ${err.message || JSON.stringify(err)} `);
+        }
+    };
+
+    const [isPaymentLoading, setIsPaymentLoading] = useState(false);
+
+    const handlePayment = async (apt: AppointmentType) => {
+        if (apt.payment_status === 'paid' || isPaymentLoading) return;
+
+        const confirmPayment = confirm(`Deseja ir para o pagamento do serviço ${apt.service_name}?`);
+        if (!confirmPayment) return;
+
+        setIsPaymentLoading(true);
+
+        try {
+            const { data, error } = await supabase.functions.invoke('create-infinitepay-link', {
+                body: {
+                    appointmentId: apt.id,
+                    origin: window.location.origin
+                }
+            });
+
+            if (error) throw error;
+
+            if (data?.url) {
+                // Redirect to payment page
+                window.location.href = data.url;
+            } else {
+                alert('Erro ao gerar link de pagamento. Tente novamente mais tarde.');
+                setIsPaymentLoading(false);
+            }
+        } catch (error) {
+            console.error('Error generating payment link:', error);
+            alert('Não foi possível iniciar o pagamento. Entre em contato com o estabelecimento.');
+            setIsPaymentLoading(false);
         }
     };
 
@@ -941,6 +1030,7 @@ export default function ClientDashboard() {
                                     <div className="flex items-center gap-3">
                                         <span className={`text-xl font-medium ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{formatCurrency(selectedAppointment.service_price)}</span>
                                         <button
+                                            onClick={() => handlePayment(selectedAppointment)}
                                             disabled={selectedAppointment.payment_status === 'paid'}
                                             className={`text-sm font-medium border px-3 py-0.5 rounded transition-colors ${selectedAppointment.payment_status === 'paid'
                                                 ? (theme === 'dark' ? 'text-green-500 border-green-900/30 bg-green-900/10 cursor-not-allowed' : 'text-green-600 border-green-200 bg-green-50 cursor-not-allowed')

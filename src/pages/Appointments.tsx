@@ -228,6 +228,7 @@ export default function Appointments() {
                 .from('appointments')
                 .select(`
                     id,
+                    company_id,
                     start_time,
                     end_time,
                     client_id,
