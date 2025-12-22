@@ -20,7 +20,10 @@ interface Category {
 
 
 
+import { useToast } from '../contexts/ToastContext';
+
 export default function NewService() {
+    const { addToast } = useToast();
     const { theme } = useTheme();
     const { profile } = useUserProfileContext();
     const navigate = useNavigate();
@@ -205,7 +208,7 @@ export default function NewService() {
 
         } catch (error) {
             console.error('Error fetching service details:', error);
-            alert('Erro ao carregar os detalhes do serviço.');
+            addToast('Erro ao carregar os detalhes do serviço.', 'error');
             navigate('/catalog/services');
         } finally {
             setLoading(false);
@@ -215,7 +218,7 @@ export default function NewService() {
 
     const handleSave = async () => {
         if (!title || !profile?.company_id) {
-            alert('Por favor, preencha as informações essenciais (Título).');
+            addToast('Por favor, preencha as informações essenciais (Título).', 'error');
             return;
         }
 
@@ -300,7 +303,7 @@ export default function NewService() {
             }
         } catch (error) {
             console.error('Error saving service:', error);
-            alert('Erro ao salvar serviço.');
+            addToast('Erro ao salvar serviço.', 'error');
         } finally {
             setSaving(false);
         }

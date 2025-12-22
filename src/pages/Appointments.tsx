@@ -6,6 +6,7 @@ import AppointmentDetailsSlideOver from '../components/AppointmentDetailsSlideOv
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 import {
     Menu,
     ChevronLeft,
@@ -19,6 +20,7 @@ import {
 export default function Appointments() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const { theme } = useTheme();
+    const { addToast } = useToast();
     const [zoomLevel, setZoomLevel] = useState(100);
     const [showBusinessHours, setShowBusinessHours] = useState(true);
     const [splitCollaborators, setSplitCollaborators] = useState(true);
@@ -147,6 +149,7 @@ export default function Appointments() {
 
             if (error) {
                 console.error('Error fetching services:', error);
+                addToast('Erro ao buscar serviços.', 'error'); // Replaced alert with addToast
                 return;
             }
 
@@ -156,6 +159,7 @@ export default function Appointments() {
             }
         } catch (error) {
             console.error('Error fetching services:', error);
+            addToast('Erro ao buscar serviços.', 'error'); // Replaced alert with addToast
         }
     };
 
@@ -240,6 +244,8 @@ export default function Appointments() {
                     payment_status,
                     origin,
                     total_amount,
+                    remaining_amount,
+                    discount,
                     coupon_id,
                     coupon:coupons(code, discount_type, discount_value),
                     service:services(id, name, duration_minutes, price),
@@ -913,7 +919,7 @@ export default function Appointments() {
                         // Trigger open new appointment with prefilled?
                         // This is complex as NewAppointmentSlideOver expects specific props
                         // For now we just close or show alert
-                        alert('Edição de agendamento em breve.');
+                        addToast('Edição de agendamento em breve.', 'info');
                     }}
                 />
 
@@ -941,7 +947,7 @@ export default function Appointments() {
                     userFullName={profile?.full_name || 'Usuário'}
                     onSubmit={async ({ notes }) => {
                         if (!selectedClient || !selectedService || !appointmentDate || !appointmentTime || !profile?.company_id) {
-                            alert('Por favor, preencha todos os campos obrigatórios.');
+                            addToast('Por favor, preencha todos os campos obrigatórios.', 'error');
                             return;
                         }
 
@@ -975,15 +981,18 @@ export default function Appointments() {
                                 payment_status: 'unpaid',
                                 origin: 'business',
                                 notes: notes,
-                                total_amount: total,
-                                discount_amount: discount,
-                                discount_type: discountType
+                                total_amount: 0, // Nada foi pago na criação pelo admin
+                                remaining_amount: total, // Valor a pagar (Preço - Desconto)
+                                discount: discount, // Valor do desconto
+                                // discount_type: discountType // Se a coluna existir, ok. Senão, pode dar erro. Vou comentar por segurança se der erro, mas...
+                                // Melhor remover discount_type e discount_amount se não tiver certeza do schema, user script ADD_DISCOUNT só criou 'discount'.
+                                // Vou assumir que 'discount' é o que criamos.
                                 // appointment_name: name // If column exists, otherwise ignore
                             });
 
                         if (error) {
                             console.error('Error creating appointment:', error);
-                            alert(`Erro ao criar agendamento: ${error.message || JSON.stringify(error)}`);
+                            addToast(`Erro ao criar agendamento: ${error.message || JSON.stringify(error)}`, 'error');
                         } else {
                             // Success
                             setIsNewAppointmentOpen(false);

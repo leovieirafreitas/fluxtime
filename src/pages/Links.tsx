@@ -4,6 +4,7 @@ import { useUserProfileContext } from '../contexts/UserProfileContext';
 import { supabase } from '../lib/supabase';
 import Sidebar from '../components/Sidebar';
 import { Menu, Instagram, Facebook, Globe, BookOpen, MessageCircle, Save } from 'lucide-react';
+import { useToast } from '../contexts/ToastContext';
 
 interface CompanyLinks {
     id?: string;
@@ -18,6 +19,7 @@ interface CompanyLinks {
 export default function Links() {
     const { theme } = useTheme();
     const { profile } = useUserProfileContext();
+    const { addToast } = useToast();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [links, setLinks] = useState<CompanyLinks>({
@@ -83,10 +85,10 @@ export default function Links() {
 
             if (error) throw error;
 
-            alert('Links salvos com sucesso!');
+            addToast('Links salvos com sucesso!', 'success');
         } catch (error) {
             console.error('Error saving links:', error);
-            alert('Erro ao salvar links.');
+            addToast('Erro ao salvar links.', 'error');
         } finally {
             setSaving(false);
         }

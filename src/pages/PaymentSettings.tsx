@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useUserProfileContext } from '../contexts/UserProfileContext';
+import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
 import Sidebar from '../components/Sidebar';
 import { Menu, CheckCircle2 } from 'lucide-react';
@@ -8,6 +9,7 @@ import { Menu, CheckCircle2 } from 'lucide-react';
 export default function PaymentSettings() {
     const { theme } = useTheme();
     const { profile } = useUserProfileContext();
+    const { addToast } = useToast();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     // Config State
@@ -140,11 +142,11 @@ export default function PaymentSettings() {
 
             setIsActive(true);
             setExpanded(false);
-            alert('Configurações salvas com sucesso!');
+            addToast('Configurações salvas com sucesso!', 'success');
 
         } catch (error) {
             console.error('Error saving settings:', error);
-            alert('Erro ao salvar configurações.');
+            addToast('Erro ao salvar configurações.', 'error');
         } finally {
             setSaving(false);
         }

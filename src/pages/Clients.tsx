@@ -5,6 +5,7 @@ import { Plus, Search, Filter, Download, MoreHorizontal, X, User, Phone, Mail, A
 import { supabase } from '../lib/supabase';
 import Sidebar from '../components/Sidebar';
 import { useTheme } from '../contexts/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 
 
 interface Client {
@@ -17,6 +18,7 @@ interface Client {
 
 export default function Clients() {
     const navigate = useNavigate();
+    const { addToast } = useToast();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [clients, setClients] = useState<Client[]>([]);
     const [loading, setLoading] = useState(true);
@@ -77,7 +79,7 @@ export default function Clients() {
 
         } catch (error) {
             console.error('Erro ao criar cliente:', error);
-            alert('Erro ao criar cliente. Verifique se a tabela "clients" existe no Supabase.');
+            addToast('Erro ao criar cliente.', 'error');
         } finally {
             setSubmitting(false);
         }

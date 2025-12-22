@@ -1,0 +1,146 @@
+-- Create table for pending bookings (before payment)
+CREATE TABLE IF NOT EXISTS pending_bookings (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    client_id uuid REFERENCES clients(id) ON DELETE SET NULL,
+    service_id uuid NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+    professional_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    start_time timestamptz NOT NULL,
+    end_time timestamptz NOT NULL,
+    client_name text NOT NULL,
+    client_phone text NOT NULL,
+    client_email text,
+    notes text,
+    reservation_fee numeric NOT NULL,
+    remaining_amount numeric NOT NULL,
+    created_at timestamptz DEFAULT now(),
+    expires_at timestamptz DEFAULT (now() + interval '15 minutes'), -- Expira em 15 minutos
+    CONSTRAINT pending_bookings_time_check CHECK (end_time > start_time)
+);
+
+-- Index for faster queries
+CREATE INDEX IF NOT EXISTS idx_pending_bookings_expires ON pending_bookings(expires_at);
+CREATE INDEX IF NOT EXISTS idx_pending_bookings_company ON pending_bookings(company_id);
+
+-- Function to create pending booking (instead of appointment)
+CREATE OR REPLACE FUNCTION public_create_pending_booking(
+    p_company_id uuid,
+    p_client_id uuid,
+    p_service_id uuid,
+    p_professional_id uuid,
+    p_start_time timestamptz,
+    p_end_time timestamptz,
+    p_client_name text,
+    p_client_phone text,
+    p_client_email text,
+    p_notes text,
+    p_coupon_code text DEFAULT NULL
+)
+RETURNS uuid
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_id uuid;
+    v_service_price numeric;
+    v_reservation_fee numeric;
+    v_is_fee_enabled boolean;
+    v_remaining_amount numeric;
+BEGIN
+    -- Fetch service details
+    SELECT price, reservation_fee, is_reservation_fee_enabled 
+    INTO v_service_price, v_reservation_fee, v_is_fee_enabled
+    FROM services
+    WHERE id = p_service_id;
+
+    -- If reservation fee is enabled, create pending booking
+    IF v_is_fee_enabled AND v_reservation_fee IS NOT NULL AND v_reservation_fee > 0 THEN
+        v_remaining_amount := v_service_price - v_reservation_fee;
+        
+        INSERT INTO pending_bookings (
+            company_id, client_id, service_id, professional_id,
+            start_time, end_time,
+            client_name, client_phone, client_email, notes,
+            reservation_fee, remaining_amount
+        )
+        VALUES (
+            p_company_id, p_client_id, p_service_id, p_professional_id,
+            p_start_time, p_end_time,
+            p_client_name, p_client_phone, p_client_email, p_notes,
+            v_reservation_fee, v_remaining_amount
+        )
+        RETURNING id INTO v_id;
+    ELSE
+        -- No reservation fee, create appointment directly
+        INSERT INTO appointments (
+            company_id, client_id, service_id, professional_id,
+            start_time, end_time, status,
+            client_name, client_phone, client_email, notes,
+            payment_status
+        )
+        VALUES (
+            p_company_id, p_client_id, p_service_id, p_professional_id,
+            p_start_time, p_end_time, 'confirmed',
+            p_client_name, p_client_phone, p_client_email, p_notes,
+            'unpaid'
+        )
+        RETURNING id INTO v_id;
+    END IF;
+    
+    RETURN v_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to convert pending booking to appointment (called by webhook after payment)
+CREATE OR REPLACE FUNCTION confirm_pending_booking(p_pending_id uuid)
+RETURNS uuid
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_appointment_id uuid;
+    v_pending record;
+BEGIN
+    -- Get pending booking details
+    SELECT * INTO v_pending FROM pending_bookings WHERE id = p_pending_id;
+    
+    IF v_pending IS NULL THEN
+        RAISE EXCEPTION 'Pending booking not found';
+    END IF;
+    
+    -- Create the actual appointment
+    INSERT INTO appointments (
+        company_id, client_id, service_id, professional_id,
+        start_time, end_time, status,
+        client_name, client_phone, client_email, notes,
+        total_amount, remaining_amount, payment_status
+    )
+    VALUES (
+        v_pending.company_id, v_pending.client_id, v_pending.service_id, v_pending.professional_id,
+        v_pending.start_time, v_pending.end_time, 'confirmed',
+        v_pending.client_name, v_pending.client_phone, v_pending.client_email, v_pending.notes,
+        v_pending.reservation_fee, v_pending.remaining_amount, 'paid'
+    )
+    RETURNING id INTO v_appointment_id;
+    
+    -- Delete the pending booking
+    DELETE FROM pending_bookings WHERE id = p_pending_id;
+    
+    RETURN v_appointment_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Cleanup function for expired pending bookings (run periodically)
+CREATE OR REPLACE FUNCTION cleanup_expired_pending_bookings()
+RETURNS integer
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_deleted_count integer;
+BEGIN
+    DELETE FROM pending_bookings WHERE expires_at < now();
+    GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
+    RETURN v_deleted_count;
+END;
+$$ LANGUAGE plpgsql;

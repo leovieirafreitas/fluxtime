@@ -266,7 +266,7 @@ export default function Services() {
                                                 <span className={theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}>
                                                     {service.is_reservation_fee_enabled
                                                         ? formatPrice(service.reservation_fee || 0)
-                                                        : '0%'
+                                                        : '-'
                                                     }
                                                 </span>
                                             </td>

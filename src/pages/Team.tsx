@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useUserProfile } from '../hooks/useUserProfile';
+import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
 import { Menu, Plus, Lock, AlertCircle, ChevronDown } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
@@ -19,6 +20,7 @@ interface TeamMember {
 export default function Team() {
     const { theme } = useTheme();
     const { profile } = useUserProfile();
+    const { addToast } = useToast();
     const [loading, setLoading] = useState(true);
     const [members, setMembers] = useState<TeamMember[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -130,7 +132,7 @@ export default function Team() {
             fetchTeam();
         } catch (error) {
             console.error('Error adding member:', error);
-            alert('Erro ao adicionar colaborador. Verifique se você tem permissões.');
+            addToast('Erro ao adicionar colaborador. Verifique se você tem permissões.', 'error');
         } finally {
             setSaving(false);
         }

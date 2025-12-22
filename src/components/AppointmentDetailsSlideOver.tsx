@@ -13,6 +13,8 @@ interface AppointmentDetailsSlideOverProps {
     onEdit?: (appointment: any) => void;
 }
 
+import { useToast } from '../contexts/ToastContext';
+
 export default function AppointmentDetailsSlideOver({
     isOpen,
     onClose,
@@ -21,6 +23,7 @@ export default function AppointmentDetailsSlideOver({
     companyName = 'Empresa',
     onEdit
 }: AppointmentDetailsSlideOverProps) {
+    const { addToast } = useToast();
     const navigate = useNavigate();
     const [isClosing, setIsClosing] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -101,7 +104,7 @@ export default function AppointmentDetailsSlideOver({
             handleClose();
         } catch (error) {
             console.error('Error cancelling appointment:', error);
-            alert('Erro ao cancelar agendamento.');
+            addToast('Erro ao cancelar agendamento.', 'error');
         } finally {
             setLoading(false);
         }
@@ -120,26 +123,77 @@ export default function AppointmentDetailsSlideOver({
             // Don't close, just update UI
         } catch (error) {
             console.error('Error confirming appointment:', error);
-            alert('Erro ao confirmar agendamento.');
+            addToast('Erro ao confirmar agendamento.', 'error');
         } finally {
             setLoading(false);
         }
     };
 
     const handleTogglePayment = async () => {
-        const newStatus = appointment.payment_status === 'paid' ? 'unpaid' : 'paid';
+        const isPaid = appointment.payment_status === 'paid';
+        const newStatus = isPaid ? 'unpaid' : 'paid';
         setLoading(true);
+
         try {
+            // Fetch fresh data to ensure we use valid Discount and Price values even if UI is stale
+            const { data: freshData } = await supabase
+                .from('appointments')
+                .select(`
+                    discount,
+                    total_amount,
+                    service:services(price)
+                `)
+                .eq('id', appointment.id)
+                .single();
+
+            const dbDiscount = freshData?.discount || 0;
+            // @ts-ignore
+            const dbServicePrice = freshData?.service?.price || appointment.service?.price || 0;
+            const dbTotalAmount = freshData?.total_amount;
+
+            // Logic to preserve manual price as discount (matching TransactionDetails.tsx)
+            let newDiscount = dbDiscount;
+
+            if (newStatus === 'unpaid' && isPaid) {
+                const confirmed = window.confirm('Ao marcar como NÃO PAGO, o registro de pagamento será removido e o valor voltará a ser cobrado na íntegra (considerando descontos). Deseja continuar?');
+                if (!confirmed) {
+                    setLoading(false);
+                    return;
+                }
+
+                // Implied discount calculation
+                // Ex: Price 55, Paid 54, Discount DB 0. => Implícito 1.
+                // Use totalAmount which is consistently the 'Paid Amount' when status is Paid.
+                const currentPaid = dbTotalAmount ?? dbServicePrice;
+
+                if (dbServicePrice > 0 && currentPaid < dbServicePrice) {
+                    const impliedDiscount = dbServicePrice - currentPaid;
+                    // If implied discount is greater than recorded, update it
+                    if (impliedDiscount > newDiscount) {
+                        newDiscount = impliedDiscount;
+                    }
+                }
+            }
+
+            // Determine the amount to lock in if paying
+            // We want to lock in the FULL FINAL PRICE (Service - Discount).
+            const finalTotal = Math.max(0, dbServicePrice - newDiscount);
+
             const { error } = await supabase
                 .from('appointments')
-                .update({ payment_status: newStatus })
+                .update({
+                    payment_status: newStatus,
+                    remaining_amount: newStatus === 'paid' ? 0 : null,
+                    total_amount: newStatus === 'paid' ? finalTotal : null,
+                    discount: newDiscount
+                })
                 .eq('id', appointment.id);
 
             if (error) throw error;
-            onUpdate(); // Need to refresh parent data to reflect change
+            onUpdate();
         } catch (error) {
             console.error('Error updating payment:', error);
-            alert('Erro ao atualizar pagamento.');
+            addToast('Erro ao atualizar pagamento.', 'error');
         } finally {
             setLoading(false);
         }
@@ -160,12 +214,12 @@ export default function AppointmentDetailsSlideOver({
             if (data?.url) {
                 window.location.href = data.url;
             } else {
-                alert('Erro ao gerar link de pagamento. Tente novamente.');
+                addToast('Erro ao gerar link de pagamento. Tente novamente.', 'error');
             }
 
         } catch (error) {
             console.error('Error generating link:', error);
-            alert('Erro ao conectar com InfinitePay. Verifique se a integração está ativa.');
+            addToast('Erro ao conectar com InfinitePay. Verifique se a integração está ativa.', 'error');
         } finally {
             setLoading(false);
         }
@@ -179,11 +233,43 @@ export default function AppointmentDetailsSlideOver({
     // Payment Status
     const isPaid = appointment.payment_status === 'paid';
     const servicePrice = appointment.service?.price || 0;
-    const totalAmount = appointment.total_amount ?? servicePrice; // Fallback to service price if total_amount is null
+    const discount = appointment.discount || 0;
+
+    // Robust Total Calculation:
+    // 1. Start with raw total_amount from DB
+    let rawTotal = appointment.total_amount;
+
+    // 2. Sanity Check: If total is 0, but we have a partial discount (not full), 
+    // it implies the 0 is likely an error/default, not a "Free" service.
+    if (rawTotal === 0 && discount > 0 && discount < servicePrice) {
+        rawTotal = null; // Force recalculation
+    }
+
+    // 3. Final calculation
+    const totalAmount = (rawTotal !== null && rawTotal !== undefined)
+        ? rawTotal
+        : Math.max(0, servicePrice - discount);
+
     const coupon = appointment.coupon;
 
+    const isFeeEnabled = appointment.service?.is_reservation_fee_enabled;
+    const feeAmount = appointment.service?.reservation_fee || 0;
+
+    // Check if the current total matches the reservation fee
+    const remaining = appointment.remaining_amount;
+    // Only calculate a specific paid amount if there is a remaining balance tracked
+    const paidAmount = (remaining !== null && remaining !== undefined)
+        ? totalAmount - remaining
+        : (isPaid ? totalAmount : 0);
+
+    const isPayingFee = isFeeEnabled && Math.abs(paidAmount - feeAmount) < 0.01 && (remaining || 0) > 0;
+
+    // Partial if not fully 'paid' status, paid > 0, and we actually have a remaining balance tracked
+    const isPartiallyPaid = !isPaid && paidAmount > 0 && (remaining !== null && remaining !== undefined);
+
     const discountValue = servicePrice - totalAmount;
-    const hasDiscount = discountValue > 0 || !!coupon;
+    // Only show discount if it's NOT just the fee payment (i.e., we are paying the fee, so the "difference" is just the rest of the price, not a discount)
+    const hasDiscount = !isPayingFee && (discountValue > 0 || !!coupon);
 
     // Determine Creator Label
     const getCreatorLabel = () => {
@@ -368,6 +454,15 @@ export default function AppointmentDetailsSlideOver({
                                 {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(servicePrice)}
                             </div>
 
+                            {isPartiallyPaid && (
+                                <>
+                                    <div className="text-slate-500 font-medium">Taxa de Reserva</div>
+                                    <div className="font-medium text-green-600">
+                                        - {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(paidAmount)}
+                                    </div>
+                                </>
+                            )}
+
                             {hasDiscount && (
                                 <>
                                     <div className="text-slate-500 font-medium flex items-center gap-1">
@@ -382,15 +477,20 @@ export default function AppointmentDetailsSlideOver({
 
                             <div className="text-slate-900 font-bold text-base">Total</div>
                             <div className="font-bold text-slate-900 text-xl">
-                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalAmount)}
+                                {isPartiallyPaid
+                                    ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(appointment.remaining_amount)
+                                    : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalAmount)
+                                }
                             </div>
+
+
 
                             <div className="text-slate-500 font-medium pt-2">Status</div>
                             <div className="pt-2">
                                 <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize
-                                    ${isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}
+                                    ${isPaid ? 'bg-green-100 text-green-700' : isPartiallyPaid ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}
                                 `}>
-                                    {isPaid ? 'Pago' : 'Não pago'}
+                                    {isPaid ? 'Pago' : isPartiallyPaid ? `Parcial: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(paidAmount)}` : 'Não pago'}
                                 </span>
                             </div>
                         </div>
@@ -412,7 +512,47 @@ export default function AppointmentDetailsSlideOver({
                     </button>
                     {!isPaid && (
                         <button
-                            onClick={handleGeneratePaymentLink}
+                            onClick={async () => {
+                                // If partial payment or we have remaining amount and fee paid, treat as 'Pay Remaining'
+                                if (isPartiallyPaid || (isPayingFee && appointment.remaining_amount && appointment.remaining_amount > 0)) {
+                                    setLoading(true);
+                                    try {
+                                        const { error: updateError } = await supabase
+                                            .from('appointments')
+                                            .update({
+                                                total_amount: appointment.remaining_amount,
+                                                remaining_amount: null,
+                                                payment_status: 'unpaid'
+                                            })
+                                            .eq('id', appointment.id);
+
+                                        if (updateError) throw updateError;
+
+                                        const { data: paymentData, error: paymentError } = await supabase.functions.invoke('create-infinitepay-link', {
+                                            body: {
+                                                appointmentId: appointment.id,
+                                                origin: window.location.origin
+                                            }
+                                        });
+
+                                        if (paymentError) throw paymentError;
+
+                                        if (paymentData?.url) {
+                                            window.location.href = paymentData.url;
+                                        } else {
+                                            addToast('Erro ao gerar link de pagamento.', 'error');
+                                        }
+                                    } catch (error) {
+                                        console.error('Error:', error);
+                                        addToast('Erro ao gerar link de pagamento do valor restante.', 'error');
+                                    } finally {
+                                        setLoading(false);
+                                    }
+                                } else {
+                                    // Standard full payment logic
+                                    handleGeneratePaymentLink();
+                                }
+                            }}
                             disabled={loading || !hasInfinitePay}
                             className={`flex-1 py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2
                                 ${hasInfinitePay && !loading
@@ -425,6 +565,8 @@ export default function AppointmentDetailsSlideOver({
                             Cobrar agora
                         </button>
                     )}
+
+
                 </div>
             </div>
         </div>

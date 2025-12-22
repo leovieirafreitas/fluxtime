@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Star, Send, CheckCircle } from 'lucide-react';
+import { useToast } from '../contexts/ToastContext';
 
 export default function PublicReviewPage() {
     const { companyId } = useParams<{ companyId: string }>();
+    const { addToast } = useToast();
     const [rating, setRating] = useState(0);
     const [hoverRating, setHoverRating] = useState(0);
     const [clientName, setClientName] = useState('');
@@ -38,7 +40,7 @@ export default function PublicReviewPage() {
         e.preventDefault();
 
         if (!rating || !clientName.trim()) {
-            alert('Por favor, preencha seu nome e selecione uma avaliação.');
+            addToast('Por favor, preencha seu nome e selecione uma avaliação.', 'error');
             return;
         }
 
@@ -58,7 +60,7 @@ export default function PublicReviewPage() {
             setSubmitted(true);
         } catch (error) {
             console.error('Error submitting review:', error);
-            alert('Erro ao enviar avaliação. Tente novamente.');
+            addToast('Erro ao enviar avaliação. Tente novamente.', 'error');
         } finally {
             setSubmitting(false);
         }

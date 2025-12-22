@@ -1,16 +1,16 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
     MapPin,
     Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, Clock,
     LogOut, Menu,
-    Plus, Search, X, Zap, Coins, ExternalLink,
+    Plus, Search, X, Zap, Coins, ExternalLink, CreditCard,
     Sun,
     Moon
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 import DefaultClientAvatar from '../components/DefaultClientAvatar';
 import { getClientSession, clearClientSession } from '../lib/clientSession';
 
@@ -32,6 +32,9 @@ interface AppointmentType {
     client_phone: string;
     client_email: string;
     payment_status?: 'paid' | 'unpaid' | string;
+    remaining_amount?: number;
+    total_amount?: number;
+    discount?: number;
 }
 
 const formatCurrency = (value: number) => {
@@ -67,16 +70,21 @@ const getStatusLabel = (status: string) => {
 };
 
 import { useRef } from 'react';
+import SuccessPopup from '../components/SuccessPopup';
+import ErrorPopup from '../components/ErrorPopup';
 
 export default function ClientDashboard() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const { theme, toggleTheme } = useTheme();
-    const [clientName, setClientName] = useState('Cliente');
+    const { addToast } = useToast();
+
     const [clientPhone, setClientPhone] = useState('');
     const [clientEmail, setClientEmail] = useState('');
+    const [clientName, setClientName] = useState('');
     const [clientJoinDate, setClientJoinDate] = useState<string>('');
     const [appointments, setAppointments] = useState<AppointmentType[]>([]);
+    const [companies, setCompanies] = useState<any[]>([]); // New state for independent companies list
     const [isLoading, setIsLoading] = useState(true);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [filter, setFilter] = useState<'future' | 'past'>('future');
@@ -97,7 +105,100 @@ export default function ClientDashboard() {
     const [isRescheduling, setIsRescheduling] = useState(false);
     const lastAppointmentRef = useRef<HTMLDivElement>(null);
 
-    // Scroll effect to go to the last appointment on load
+    const processedRef = useRef(false);
+
+    // Success popup state
+    const [successPopup, setSuccessPopup] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+    }>({ isOpen: false, title: '', message: '' });
+
+    // Error popup state
+    const [errorPopup, setErrorPopup] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+    }>({ isOpen: false, title: '', message: '' });
+
+    // Show payment success message after reload
+    useEffect(() => {
+        const successMessage = sessionStorage.getItem('payment_success_message');
+        const showPopup = sessionStorage.getItem('show_success_popup');
+
+        if (successMessage) {
+            addToast(successMessage, 'success');
+            sessionStorage.removeItem('payment_success_message');
+        }
+
+        if (showPopup) {
+            setSuccessPopup({
+                isOpen: true,
+                title: 'Pagamento Realizado!',
+                message: 'Seu agendamento foi confirmado com sucesso.'
+            });
+            sessionStorage.removeItem('show_success_popup');
+        }
+    }, [addToast]);
+
+
+    // Auto-confirm pending booking if payment was successful
+    useEffect(() => {
+        const confirmPendingPayment = async () => {
+            const paymentSuccess = searchParams.get('payment_success');
+            let pendingId = searchParams.get('pending_id');
+            const orderNsu = searchParams.get('order_nsu');
+            const captureMethod = searchParams.get('capture_method');
+
+            // Fallback to order_nsu if pending_id is missing (InfinitePay sends order_nsu)
+            if (!pendingId && orderNsu) {
+                pendingId = orderNsu;
+            }
+
+            if (paymentSuccess === 'true' && pendingId) {
+                if (processedRef.current) return;
+                processedRef.current = true;
+
+                // Map capture_method to our internal types
+                let paymentMethod = 'credit_card'; // Default fallback
+                if (captureMethod) {
+                    if (captureMethod === 'pix') paymentMethod = 'pix';
+                    else if (captureMethod.includes('debit')) paymentMethod = 'debit_card';
+                    else if (captureMethod.includes('credit')) paymentMethod = 'credit_card';
+                }
+
+                try {
+                    // Try to confirm the pending booking immediately
+                    // This function should be created in the database to allow frontend confirmation
+                    // It securely checks if the booking exists and converts it
+                    const { data, error } = await supabase.rpc('confirm_pending_booking_frontend', {
+                        p_pending_id: pendingId,
+                        p_payment_method: paymentMethod
+                    });
+
+                    if (error) {
+                        console.error('Error confirming payment:', error);
+                        // If error is "function not found", it means the SQL script wasn't run.
+                        // But we don't want to alarm the user if it was already confirmed by webhook.
+                    } else if (data) {
+                        // Success!
+                        // Set flag to show popup after reload
+                        sessionStorage.setItem('show_success_popup', 'true');
+
+                        // Remove params from URL
+                        navigate('/client/dashboard', { replace: true });
+                        // Refresh data
+                        window.location.reload();
+                    }
+                } catch (err) {
+                    console.error('Error in payment confirmation:', err);
+                }
+            }
+        };
+
+        confirmPendingPayment();
+    }, [searchParams, navigate]);
+
     useEffect(() => {
         if (!isLoading) {
             // Small timeout to ensure DOM is ready
@@ -137,6 +238,13 @@ export default function ClientDashboard() {
 
                 setAppointments(aptData || []);
 
+                // Fetch independent companies list
+                const { data: companiesData } = await supabase.rpc('fetch_client_companies_list', {
+                    p_phone: cleanPhone,
+                    p_email: session.email
+                });
+                if (companiesData) setCompanies(companiesData);
+
                 if (cleanPhone) {
                     const { data: clientData } = await supabase.from('clients').select('created_at').eq('phone', session.phone).single();
                     if (clientData) setClientJoinDate(clientData.created_at);
@@ -170,6 +278,9 @@ export default function ClientDashboard() {
 
         const confirmPayment = async () => {
             if (transactionNsu && orderNsu) {
+                if (processedRef.current) return;
+                processedRef.current = true;
+
                 try {
                     // Call RPC to confirm payment on backend (Client-side confirmation fallback)
                     const { error } = await supabase.rpc('client_mark_appointment_paid', {
@@ -182,7 +293,8 @@ export default function ClientDashboard() {
                         // We continue to show success to user if it fails (maybe already paid via webhook)
                     }
 
-                    alert('Pagamento processado com sucesso! 🎉');
+                    // Store success message to show after reload
+                    sessionStorage.setItem('payment_success_message', 'Pagamento confirmado! Seu agendamento foi realizado com sucesso. 🎉');
 
                     // Cleanup URL
                     const newParams = new URLSearchParams(searchParams);
@@ -202,9 +314,12 @@ export default function ClientDashboard() {
                 } catch (err) {
                     console.error('Processing payment return error:', err);
                 }
-            } else if (paymentSuccess === 'true') {
+            } else if (paymentSuccess === 'true' && !searchParams.get('pending_id')) {
+                if (processedRef.current) return;
+                processedRef.current = true;
+
                 // Fallback for legacy generic success flag
-                alert('Pagamento verificado! 🎉');
+                sessionStorage.setItem('payment_success_message', 'Pagamento confirmado! Seu agendamento foi realizado com sucesso. 🎉');
                 const newParams = new URLSearchParams(searchParams);
                 newParams.delete('payment_success');
                 navigate(`/client/dashboard?${newParams.toString()}`, { replace: true });
@@ -249,10 +364,10 @@ export default function ClientDashboard() {
                 a.id === selectedAppointment.id ? { ...a, status: 'cancelled' } : a
             ));
             setSelectedAppointment(null); // Close modal
-            alert('Agendamento desmarcado com sucesso.');
+            addToast('Agendamento desmarcado com sucesso.', 'success');
         } catch (err: any) {
             console.error('Error canceling:', err);
-            alert(`Erro ao cancelar agendamento: ${err.message || JSON.stringify(err)} `);
+            addToast(`Erro ao cancelar agendamento: ${err.message || JSON.stringify(err)} `, 'error');
         }
     };
 
@@ -275,10 +390,10 @@ export default function ClientDashboard() {
 
             // Close modal or update selected appointment
             setSelectedAppointment(prev => prev ? { ...prev, status: 'confirmed' } : null);
-            alert('Agendamento confirmado com sucesso!');
+            addToast('Agendamento confirmado com sucesso!', 'success');
         } catch (err: any) {
             console.error('Error confirming:', err);
-            alert(`Erro ao confirmar agendamento: ${err.message || JSON.stringify(err)} `);
+            addToast(`Erro ao confirmar agendamento: ${err.message || JSON.stringify(err)} `, 'error');
         }
     };
 
@@ -296,7 +411,8 @@ export default function ClientDashboard() {
             const { data, error } = await supabase.functions.invoke('create-infinitepay-link', {
                 body: {
                     appointmentId: apt.id,
-                    origin: window.location.origin
+                    origin: window.location.origin,
+                    amount: (apt.remaining_amount && apt.remaining_amount > 0) ? apt.remaining_amount : undefined // Send specific amount if partial
                 }
             });
 
@@ -306,12 +422,12 @@ export default function ClientDashboard() {
                 // Redirect to payment page
                 window.location.href = data.url;
             } else {
-                alert('Erro ao gerar link de pagamento. Tente novamente mais tarde.');
+                addToast('Erro ao gerar link de pagamento. Tente novamente mais tarde.', 'error');
                 setIsPaymentLoading(false);
             }
         } catch (error) {
             console.error('Error generating payment link:', error);
-            alert('Não foi possível iniciar o pagamento. Entre em contato com o estabelecimento.');
+            addToast('Não foi possível iniciar o pagamento. Entre em contato com o estabelecimento.', 'error');
             setIsPaymentLoading(false);
         }
     };
@@ -377,15 +493,21 @@ export default function ClientDashboard() {
         ...(clientJoinDate ? [{ type: 'created', date: clientJoinDate, data: { name: clientName } }] : [])
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    // Group by company and find the latest appointment for each to use as 'lastInteraction'
-    const companiesMap = new Map();
-    appointments.forEach(app => {
-        const existing = companiesMap.get(app.company_id);
-        if (!existing || new Date(app.start_time) > new Date(existing.start_time)) {
-            companiesMap.set(app.company_id, { ...app, lastInteraction: app.start_time });
-        }
+    // Derive companies from the INDEPENDENT list, fetching last interaction from appointments if available
+    const uniqueCompanies = companies.map(comp => {
+        const latestApp = appointments
+            .filter(a => a.company_id === comp.id)
+            .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())[0];
+
+        return {
+            company_id: comp.id,
+            company_name: comp.name,
+            company_logo_url: comp.logo_url,
+            company_slug: comp.slug,
+            company_address: comp.address,
+            lastInteraction: latestApp?.start_time || null
+        };
     });
-    const uniqueCompanies = Array.from(companiesMap.values());
 
     return (
         <div className={`min-h-screen font-sans ${theme === 'dark' ? 'bg-black text-white' : 'bg-slate-50 text-slate-900'}`}>
@@ -499,13 +621,13 @@ export default function ClientDashboard() {
                                                         {company.company_name}
                                                     </p>
                                                     <p className={`text-xs ${theme === 'dark' ? 'text-neutral-500' : 'text-slate-500'}`}>
-                                                        {timeAgo(company.lastInteraction)}
+                                                        {company.lastInteraction ? timeAgo(company.lastInteraction) : 'Cliente cadastrado'}
                                                     </p>
                                                 </div>
                                             </div>
 
                                             <a
-                                                href={`/${company.company_slug}`}
+                                                href={`/${company.company_id}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors ${theme === 'dark' ? 'bg-blue-900/40 text-blue-400 hover:bg-blue-900/60' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
@@ -614,8 +736,8 @@ export default function ClientDashboard() {
 
                                                         {/* Calendar Grid */}
                                                         <div className="grid grid-cols-7 gap-1 mb-2">
-                                                            {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(day => (
-                                                                <div key={day} className={`text-center text-[10px] font-bold ${theme === 'dark' ? 'text-neutral-500' : 'text-slate-400'}`}>
+                                                            {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((day, idx) => (
+                                                                <div key={`day-${idx}`} className={`text-center text-[10px] font-bold ${theme === 'dark' ? 'text-neutral-500' : 'text-slate-400'}`}>
                                                                     {day}
                                                                 </div>
                                                             ))}
@@ -882,7 +1004,9 @@ export default function ClientDashboard() {
                                                             </div>
                                                             <div className="text-right">
                                                                 <p className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{formatCurrency(app.service_price)}</p>
-                                                                <span className="text-[10px] font-bold text-red-500 uppercase">Não pago</span>
+                                                                <span className={`text-[10px] font-bold uppercase ${app.remaining_amount && app.remaining_amount > 0 ? 'text-orange-500' : 'text-red-500'}`}>
+                                                                    {app.remaining_amount && app.remaining_amount > 0 ? 'Parcial' : 'Não pago'}
+                                                                </span>
                                                             </div>
                                                         </div>
                                                     ))
@@ -1023,23 +1147,75 @@ export default function ClientDashboard() {
                                 <div>
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className={`text-sm ${theme === 'dark' ? 'text-neutral-400' : 'text-slate-500'}`}>Valor</span>
-                                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${selectedAppointment.payment_status === 'paid' ? (theme === 'dark' ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-700') : (theme === 'dark' ? 'bg-red-900/30 text-red-400' : 'bg-red-50 text-red-600')}`}>
-                                            {selectedAppointment.payment_status === 'paid' ? 'Pago' : 'Não pago'}
-                                        </span>
+                                        {selectedAppointment.payment_status !== 'paid' && (
+                                            <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${selectedAppointment.remaining_amount && selectedAppointment.remaining_amount > 0 ? 'bg-orange-100 text-orange-700' : (theme === 'dark' ? 'bg-red-900/30 text-red-400' : 'bg-red-50 text-red-600')}`}>
+                                                {selectedAppointment.remaining_amount && selectedAppointment.remaining_amount > 0 ? `Parcial: ${formatCurrency((selectedAppointment.service_price || 0) - (selectedAppointment.remaining_amount || 0))}` : 'Não pago'}
+                                            </span>
+                                        )}
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        <span className={`text-xl font-medium ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{formatCurrency(selectedAppointment.service_price)}</span>
+
+                                    <div className="space-y-1 mb-2">
+                                        {/* Partial Amount Display */}
+                                        {selectedAppointment.payment_status !== 'paid' && selectedAppointment.remaining_amount !== undefined && selectedAppointment.remaining_amount > 0 && (
+                                            <>
+                                                <div className="flex justify-between text-sm">
+                                                    <span className={theme === 'dark' ? 'text-neutral-400' : 'text-slate-500'}>Valor Original</span>
+                                                    <span className={`${theme === 'dark' ? 'text-white' : 'text-slate-900'} line-through opacity-70`}>{formatCurrency(selectedAppointment.service_price)}</span>
+                                                </div>
+                                                <div className="flex justify-between text-base font-bold pt-1 border-t border-slate-100 dark:border-neutral-800">
+                                                    <span className={theme === 'dark' ? 'text-white' : 'text-slate-900'}>Total a Pagar</span>
+                                                    <span className="text-green-600 dark:text-green-400 text-xl">{formatCurrency(selectedAppointment.remaining_amount)}</span>
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {/* Discount Display (When paid OR full payment needed, AND discount exists) */}
+                                        {(selectedAppointment.payment_status === 'paid' || !selectedAppointment.remaining_amount || selectedAppointment.remaining_amount <= 0) &&
+                                            selectedAppointment.discount !== undefined && selectedAppointment.discount > 0 && (
+                                                <>
+                                                    <div className="flex justify-between text-sm">
+                                                        <span className={theme === 'dark' ? 'text-neutral-400' : 'text-slate-500'}>Valor do Serviço</span>
+                                                        <span className={`${theme === 'dark' ? 'text-white' : 'text-slate-900'} line-through opacity-70`}>{formatCurrency(selectedAppointment.service_price)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between text-sm text-red-500 font-medium">
+                                                        <span>Desconto</span>
+                                                        <span>- {formatCurrency(selectedAppointment.discount)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between text-base font-bold pt-1 border-t border-slate-100 dark:border-neutral-800 mt-1">
+                                                        <span className={theme === 'dark' ? 'text-white' : 'text-slate-900'}>Total</span>
+                                                        <span className="text-blue-600 dark:text-blue-400 text-xl">
+                                                            {formatCurrency(
+                                                                selectedAppointment.total_amount || (selectedAppointment.service_price - selectedAppointment.discount)
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                </>
+                                            )}
+
+                                        {/* Standard Price Display (When paid OR full payment needed, AND NO discount) */}
+                                        {(selectedAppointment.payment_status === 'paid' || !selectedAppointment.remaining_amount || selectedAppointment.remaining_amount <= 0) &&
+                                            (!selectedAppointment.discount || selectedAppointment.discount <= 0) && (
+                                                <div className="flex items-center gap-3">
+                                                    <span className={`text-xl font-medium ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                                                        {formatCurrency(
+                                                            selectedAppointment.total_amount !== null && selectedAppointment.total_amount !== undefined
+                                                                ? selectedAppointment.total_amount
+                                                                : selectedAppointment.service_price
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            )}
+                                    </div>
+
+                                    {selectedAppointment.payment_status !== 'paid' && (
                                         <button
                                             onClick={() => handlePayment(selectedAppointment)}
-                                            disabled={selectedAppointment.payment_status === 'paid'}
-                                            className={`text-sm font-medium border px-3 py-0.5 rounded transition-colors ${selectedAppointment.payment_status === 'paid'
-                                                ? (theme === 'dark' ? 'text-green-500 border-green-900/30 bg-green-900/10 cursor-not-allowed' : 'text-green-600 border-green-200 bg-green-50 cursor-not-allowed')
-                                                : (theme === 'dark' ? 'text-blue-400 border-blue-800 hover:bg-neutral-800' : 'text-blue-600 border-blue-200 hover:bg-blue-50')
-                                                }`}
+                                            className={`w-full mt-2 text-sm font-medium border px-3 py-2 rounded-xl transition-colors flex items-center justify-center gap-2 ${theme === 'dark' ? 'text-black bg-white hover:bg-neutral-200' : 'text-white bg-blue-600 hover:bg-blue-700 border-transparent shadow-sm'}`}
                                         >
-                                            {selectedAppointment.payment_status === 'paid' ? 'Pago' : 'Pagar'}
+                                            <CreditCard className="w-4 h-4" />
+                                            Pagar Agora
                                         </button>
-                                    </div>
+                                    )}
                                 </div>
 
                                 {/* Business */}
@@ -1097,20 +1273,24 @@ export default function ClientDashboard() {
                                         </>
                                     ) : (
                                         <>
-                                            <button
-                                                onClick={handleCancelAppointment}
-                                                className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors ${theme === 'dark' ? 'text-red-400 hover:bg-red-900/20' : 'text-red-600 hover:bg-red-50'}`}
-                                            >
-                                                Cancelar Agendamento
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setIsRescheduling(true);
-                                                }}
-                                                className={`px-4 py-2 text-sm font-medium rounded-xl border transition-colors ${theme === 'dark' ? 'bg-neutral-900 border-neutral-700 text-neutral-300 hover:bg-neutral-800' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
-                                            >
-                                                Remarcar
-                                            </button>
+                                            {selectedAppointment.payment_status !== 'paid' && (
+                                                <button
+                                                    onClick={handleCancelAppointment}
+                                                    className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors ${theme === 'dark' ? 'text-red-400 hover:bg-red-900/20' : 'text-red-600 hover:bg-red-50'}`}
+                                                >
+                                                    Cancelar Agendamento
+                                                </button>
+                                            )}
+                                            {selectedAppointment.payment_status !== 'paid' && (
+                                                <button
+                                                    onClick={() => {
+                                                        setIsRescheduling(true);
+                                                    }}
+                                                    className={`px-4 py-2 text-sm font-medium rounded-xl border transition-colors ${theme === 'dark' ? 'bg-neutral-900 border-neutral-700 text-neutral-300 hover:bg-neutral-800' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+                                                >
+                                                    Remarcar
+                                                </button>
+                                            )}
                                         </>
                                     )}
                                 </div>
@@ -1150,15 +1330,33 @@ export default function ClientDashboard() {
                         }}
                         clientPhone={clientPhone}
                         clientEmail={clientEmail}
+                        setSuccessPopup={setSuccessPopup}
+                        setErrorPopup={setErrorPopup}
                     />
                 )
             }
+
+            {/* Success Popup */}
+            <SuccessPopup
+                isOpen={successPopup.isOpen}
+                onClose={() => setSuccessPopup({ ...successPopup, isOpen: false })}
+                title={successPopup.title}
+                message={successPopup.message}
+            />
+
+            {/* Error Popup */}
+            <ErrorPopup
+                isOpen={errorPopup.isOpen}
+                onClose={() => setErrorPopup({ ...errorPopup, isOpen: false })}
+                title={errorPopup.title}
+                message={errorPopup.message}
+            />
         </div >
     );
 }
 
 // Reschedule Modal Component
-function RescheduleModal({ appointment, onClose, onSuccess, clientPhone, clientEmail, theme }: any) {
+function RescheduleModal({ appointment, onClose, onSuccess, clientPhone, clientEmail, theme, setSuccessPopup, setErrorPopup }: any) {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [weekDates, setWeekDates] = useState<Date[]>([]);
     const [availableSlots, setAvailableSlots] = useState<string[]>([]);
@@ -1325,11 +1523,24 @@ function RescheduleModal({ appointment, onClose, onSuccess, clientPhone, clientE
             });
 
             if (error) throw error;
-            alert('Reagendamento confirmado!');
-            onSuccess();
+
+            // Show success popup
+            setSuccessPopup({
+                isOpen: true,
+                title: 'Reagendamento confirmado!',
+                message: 'Seu agendamento foi remarcado com sucesso.'
+            });
+
+            setTimeout(() => {
+                onSuccess();
+            }, 3000); // Wait for popup to close
         } catch (error) {
-            console.error(error);
-            alert('Erro ao reagendar.');
+            console.error('Erro ao reagendar:', error);
+            setErrorPopup({
+                isOpen: true,
+                title: 'Erro ao reagendar',
+                message: 'Não foi possível remarcar seu agendamento. Tente novamente.'
+            });
         } finally {
             setIsSaving(false);
         }
@@ -1376,6 +1587,10 @@ function RescheduleModal({ appointment, onClose, onSuccess, clientPhone, clientE
                                 className={`p-1 rounded disabled:opacity-30 disabled:cursor-not-allowed ${theme === 'dark' ? 'hover:bg-neutral-800 text-neutral-300' : 'hover:bg-slate-100 text-slate-600'}`}
                                 disabled={(() => {
                                     if (!schedulingRules?.scheduling_window_days) return false;
+
+                                    // Block if window is small (<= 7 days)
+                                    if (schedulingRules.scheduling_window_days <= 7) return true;
+
                                     const maxDate = new Date();
                                     maxDate.setDate(maxDate.getDate() + schedulingRules.scheduling_window_days);
                                     const nextWeek = new Date(selectedDate);
@@ -1407,7 +1622,17 @@ function RescheduleModal({ appointment, onClose, onSuccess, clientPhone, clientE
                             }
                             const isPast = date < today;
                             const isTooFar = maxDate ? date >= maxDate : false;
-                            const isDisabled = isPast || isTooFar;
+                            // Calculate end of current week (Sunday)
+                            const currentDay = today.getDay(); // 0 is Sunday
+                            const daysUntilSunday = currentDay === 0 ? 0 : 7 - currentDay;
+                            const nextSunday = new Date(today);
+                            nextSunday.setDate(today.getDate() + daysUntilSunday);
+                            nextSunday.setHours(23, 59, 59, 999);
+
+                            const isRestrictedWeek = schedulingRules?.scheduling_window_days && schedulingRules.scheduling_window_days <= 7;
+                            const isPastRestricted = isRestrictedWeek ? date > nextSunday : false;
+
+                            const isDisabled = isPastRestricted || isPast || isTooFar;
 
                             let buttonClass = 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'; // Default Light
                             if (theme === 'dark') {

@@ -18,32 +18,80 @@ serve(async (req) => {
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         )
 
-        const { appointmentId, origin } = await req.json()
+        const { appointmentId, pendingBookingId, origin, amount: requestedAmount } = await req.json()
 
-        if (!appointmentId) {
-            throw new Error('Missing appointmentId')
+        if (!appointmentId && !pendingBookingId) {
+            throw new Error('Missing appointmentId or pendingBookingId')
         }
 
-        // 1. Fetch Appointment and Service Details
-        const { data: appointment, error: appointmentError } = await supabaseClient
-            .from('appointments')
-            .select(`
-        *,
-        service:services(name, price),
-        client:profiles(full_name, phone)
-      `)
-            .eq('id', appointmentId)
-            .single()
+        let amount: number;
+        let itemName: string;
+        let orderId: string;
+        let companyId: string;
 
-        if (appointmentError || !appointment) {
-            throw new Error('Appointment not found')
+        // Check if it's a pending booking (reservation fee) or regular appointment
+        if (pendingBookingId) {
+            // Fetch Pending Booking Details
+            const { data: pendingBooking, error: pendingError } = await supabaseClient
+                .from('pending_bookings')
+                .select(`
+                    *,
+                    service:services(name)
+                `)
+                .eq('id', pendingBookingId)
+                .single()
+
+            if (pendingError || !pendingBooking) {
+                console.error('Pending booking error:', pendingError)
+                throw new Error(`Pending booking not found: ${pendingError?.message || 'Unknown error'}`)
+            }
+
+            amount = pendingBooking.reservation_fee;
+            itemName = `Taxa de Reserva - ${pendingBooking.service.name}`;
+            orderId = pendingBooking.id;
+            companyId = pendingBooking.company_id;
+        } else {
+            // Fetch Appointment Details
+            const { data: appointment, error: appointmentError } = await supabaseClient
+                .from('appointments')
+                .select(`
+                    *,
+                    service:services(name, price),
+                    client:profiles(full_name, phone)
+                `)
+                .eq('id', appointmentId)
+                .single()
+
+            if (appointmentError || !appointment) {
+                console.error('Appointment error:', appointmentError)
+                throw new Error(`Appointment not found: ${appointmentError?.message || 'Unknown error'}`)
+            }
+
+            // PRIORITY:
+            // 1. If explicitly requested (frontend says it's partial) AND it matches database logic (optional validation)
+            // 2. If appointment has remaining_amount > 0 AND it's pending, assume we want to pay the remainder.
+            // 3. Fallback to total amount or service price.
+
+            if (requestedAmount) {
+                amount = requestedAmount;
+                itemName = `Pagamento Restante - ${appointment.service.name}`;
+            } else if (appointment.remaining_amount && appointment.remaining_amount > 0) {
+                amount = appointment.remaining_amount;
+                itemName = `Pagamento Restante - ${appointment.service.name}`;
+            } else {
+                amount = appointment.total_amount ?? appointment.service.price;
+                itemName = appointment.service.name || 'Serviço Agendado';
+            }
+
+            orderId = appointment.id;
+            companyId = appointment.company_id;
         }
 
-        // 2. Fetch Company Integration Settings
+
         const { data: integration, error: integrationError } = await supabaseClient
             .from('company_payment_integrations')
             .select('settings')
-            .eq('company_id', appointment.company_id)
+            .eq('company_id', companyId)
             .eq('provider', 'infinitepay')
             .eq('is_active', true)
             .single()
@@ -58,21 +106,25 @@ serve(async (req) => {
         const handle = infinitepay_tag.replace('$', '').replace('@', '').trim()
 
         // Calculate amount in cents
-        // Ensure we use the final amount (considering discounts if any, but logic here uses total_amount or service price)
-        const amount = appointment.total_amount ? appointment.total_amount : appointment.service.price
         const amountInCents = Math.round(amount * 100)
+
+        console.log('Payment amount calculation:', {
+            orderId: orderId,
+            isPendingBooking: !!pendingBookingId,
+            amount: amount,
+            amount_in_cents: amountInCents
+        })
 
         // Items for invoice
         const items = [
             {
                 quantity: 1,
                 amount: amountInCents,
-                name: appointment.service.name || 'Serviço Agendado'
+                name: itemName
             }
         ]
         // Fallback to manual URL construction
-        // Deep linking format: https://checkout.infinitepay.io/{handle}?items=...
-        // Items must use 'price' (cents) according to deep link docs, not 'amount'.
+        // Deep linking format: https://checkout.infinitepay.io/{handle}?items=...\n        // Items must use 'price' (cents) according to deep link docs, not 'amount'.
 
         const itemsForUrl = items.map(item => ({
             quantity: item.quantity,
@@ -84,7 +136,7 @@ serve(async (req) => {
 
         const params = new URLSearchParams()
         params.append('items', itemsParam)
-        params.append('order_nsu', appointment.id)
+        params.append('order_nsu', orderId)
 
         // redirect_url validation: some environments might block localhost or require https
         let redirectBase = 'https://fluxtime.com.br';
@@ -95,10 +147,6 @@ serve(async (req) => {
         // Append payment_success param so the frontend knows to show a success message
         const redirectUrl = `${redirectBase}/client/dashboard?payment_success=true`;
         params.append('redirect_url', redirectUrl)
-
-        if (appointment.client?.full_name) {
-            params.append('customer_name', appointment.client.full_name)
-        }
 
         // Use the cleaned handle
         const cleanHandle = handle.replace(/[^a-zA-Z0-9_-]/g, '')

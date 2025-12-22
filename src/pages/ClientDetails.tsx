@@ -36,7 +36,10 @@ import DefaultClientAvatar from '../components/DefaultClientAvatar';
 import { useTheme } from '../contexts/ThemeContext';
 import { useUserProfileContext } from '../contexts/UserProfileContext';
 
+import { useToast } from '../contexts/ToastContext';
+
 export default function ClientDetails() {
+    const { addToast } = useToast();
     const { id } = useParams();
     const navigate = useNavigate();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -96,7 +99,7 @@ export default function ClientDetails() {
                 .from('appointments')
                 .select(`
                     *,
-                    service:services(name, price, duration_minutes),
+                    service:services(name, price, duration_minutes, reservation_fee, is_reservation_fee_enabled),
                     professional:profiles(full_name, avatar_url)
                 `)
                 .order('start_time', { ascending: false });
@@ -132,7 +135,7 @@ export default function ClientDetails() {
             if (error) throw error;
         } catch (error) {
             console.error('Error saving notes:', error);
-            alert('Erro ao salvar anotações');
+            addToast('Erro ao salvar anotações', 'error');
         } finally {
             setSavingNotes(false);
         }
@@ -156,7 +159,7 @@ export default function ClientDetails() {
             fetchClientData();
         } catch (error) {
             console.error('Error blocking client:', error);
-            alert('Erro ao bloquear cliente (verifique se o campo status existe)');
+            addToast('Erro ao bloquear cliente (verifique se o campo status existe)', 'error');
             setLoading(false);
         }
     };
@@ -170,7 +173,7 @@ export default function ClientDetails() {
             navigate('/clients');
         } catch (error) {
             console.error('Error deleting client:', error);
-            alert('Erro ao excluir cliente');
+            addToast('Erro ao excluir cliente', 'error');
             setLoading(false);
         }
     };
@@ -226,9 +229,19 @@ export default function ClientDetails() {
     const cancelRate = totalAppointments > 0 ? (cancelledApps / totalAppointments) * 100 : 0;
 
     // Revenue Calculations
+    // Revenue Calculations
     const realizedRevenue = appointments
         .filter(a => a.payment_status === 'paid' && a.status !== 'cancelled')
-        .reduce((sum, a) => sum + (a.total_amount || a.service?.price || 0), 0);
+        .reduce((sum, a) => {
+            const servicePrice = a.service?.price || 0;
+            const paidAmount = (a.total_amount !== null && a.total_amount !== undefined) ? a.total_amount : 0;
+            const discount = (a.discount || 0);
+            const effectivePrice = Math.max(0, servicePrice - discount);
+
+            // Lógica alinhada com Transactions.tsx: Se total_amount > 0 usa ele, senão usa (Price - Discount)
+            const value = paidAmount > 0 ? paidAmount : effectivePrice;
+            return sum + value;
+        }, 0);
 
     const unpaidAmount = appointments
         .filter(a =>
@@ -236,7 +249,11 @@ export default function ClientDetails() {
             a.payment_status !== 'paid' &&
             (a.status === 'completed' || a.status === 'finished' || new Date(a.start_time) <= new Date())
         )
-        .reduce((sum, a) => sum + (a.total_amount || a.service?.price || 0), 0);
+        .reduce((sum, a) => {
+            // Usa remaining_amount se existir, senão service price
+            const value = (a.remaining_amount !== null && a.remaining_amount !== undefined) ? a.remaining_amount : (a.service?.price || 0);
+            return sum + value;
+        }, 0);
 
     const projectedRevenue = appointments
         .filter(a =>
@@ -244,7 +261,11 @@ export default function ClientDetails() {
             a.payment_status !== 'paid' &&
             new Date(a.start_time) > new Date()
         )
-        .reduce((sum, a) => sum + (a.total_amount || a.service?.price || 0), 0);
+        .reduce((sum, a) => {
+            // Usa remaining_amount se existir, senão service price
+            const value = (a.remaining_amount !== null && a.remaining_amount !== undefined) ? a.remaining_amount : (a.service?.price || 0);
+            return sum + value;
+        }, 0);
 
 
     if (loading) {
@@ -440,6 +461,8 @@ export default function ClientDetails() {
 
                                                                         {event.data.payment_status === 'paid' ? (
                                                                             <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-green-100 text-green-700">Pago</span>
+                                                                        ) : (event.data.total_amount && event.data.remaining_amount && (event.data.total_amount - event.data.remaining_amount) > 0) ? (
+                                                                            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-orange-100 text-orange-700">Parcial: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(event.data.total_amount - event.data.remaining_amount)}</span>
                                                                         ) : (
                                                                             <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-red-100 text-red-700">Não pago</span>
                                                                         )}

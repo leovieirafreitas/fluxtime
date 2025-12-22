@@ -3,11 +3,14 @@ import { Menu, Upload, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useUserProfileContext } from '../contexts/UserProfileContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 import Sidebar from '../components/Sidebar';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function SiteCustomization() {
     const { profile } = useUserProfileContext();
     const { theme } = useTheme();
+    const { addToast } = useToast();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState<'appearance' | 'ordering'>('appearance');
@@ -20,6 +23,14 @@ export default function SiteCustomization() {
     const [removeBranding, setRemoveBranding] = useState(false);
     const [showBusinessHours, setShowBusinessHours] = useState(true);
     const [accentColor, setAccentColor] = useState('#6366f1');
+
+    // Confirm modal state
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+    }>({ isOpen: false, title: '', message: '', onConfirm: () => { } });
 
     const colors = [
         '#6366f1', // Indigo
@@ -64,9 +75,11 @@ export default function SiteCustomization() {
             }
         } catch (error) {
             console.error('Error fetching customization:', error);
-            alert('Erro ao carregar configurações');
+            addToast('Erro ao carregar configurações', 'error');
         }
     };
+
+    // ... existing state ...
 
     const handleSave = async () => {
         if (!profile?.company_id) return;
@@ -89,15 +102,15 @@ export default function SiteCustomization() {
 
             if (error) {
                 console.error('Supabase error:', error);
-                alert(`Erro ao salvar: ${error.message}`);
+                addToast(`Erro ao salvar: ${error.message}`, 'error');
                 throw error;
             }
 
             console.log('Saved successfully:', data);
-            alert('Configurações salvas com sucesso!');
+            addToast('Configurações salvas com sucesso!', 'success');
         } catch (error: any) {
             console.error('Error saving customization:', error);
-            alert(`Erro ao salvar configurações: ${error.message || 'Erro desconhecido'}`);
+            addToast(`Erro ao salvar configurações: ${error.message || 'Erro desconhecido'}`, 'error');
         } finally {
             setSaving(false);
         }
@@ -214,20 +227,112 @@ export default function SiteCustomization() {
                                     <div className="relative inline-block">
                                         <img src={logoUrl} alt="Logo" className="w-24 h-24 rounded-lg object-cover" />
                                         <button
-                                            onClick={() => setLogoUrl('')}
+                                            onClick={() => {
+                                                setConfirmModal({
+                                                    isOpen: true,
+                                                    title: 'Remover logo',
+                                                    message: 'Tem certeza que deseja remover a logo? Esta ação não pode ser desfeita.',
+                                                    onConfirm: async () => {
+                                                        try {
+                                                            setSaving(true);
+                                                            if (logoUrl && logoUrl.includes('company_logos')) {
+                                                                const oldPath = logoUrl.split('company_logos/')[1];
+                                                                if (oldPath) {
+                                                                    await supabase.storage
+                                                                        .from('company_logos')
+                                                                        .remove([oldPath]);
+                                                                }
+                                                            }
+                                                            setLogoUrl('');
+                                                            await supabase
+                                                                .from('companies')
+                                                                .update({ logo_url: '' })
+                                                                .eq('id', profile?.company_id);
+                                                            addToast('Logo removida com sucesso.', 'success');
+                                                        } catch (error) {
+                                                            console.error('Error removing logo:', error);
+                                                            addToast('Erro ao remover logo.', 'error');
+                                                        } finally {
+                                                            setSaving(false);
+                                                        }
+                                                    }
+                                                });
+                                            }}
                                             className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                            disabled={saving}
                                         >
                                             <X className="w-4 h-4" />
                                         </button>
                                     </div>
                                 ) : (
-                                    <button className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-dashed transition-colors ${theme === 'dark'
+                                    <label className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-dashed transition-colors cursor-pointer ${theme === 'dark'
                                         ? 'border-slate-700 hover:border-slate-600 text-slate-400'
                                         : 'border-slate-300 hover:border-slate-400 text-slate-600'
                                         }`}>
                                         <Upload className="w-5 h-5" />
                                         <span className="text-sm font-medium">Adicionar logo</span>
-                                    </button>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={async (e) => {
+                                                const file = e.target.files?.[0];
+                                                if (!file) return;
+
+                                                if (file.size > 2 * 1024 * 1024) {
+                                                    addToast('A imagem deve ter no máximo 2MB', 'error');
+                                                    return;
+                                                }
+
+                                                try {
+                                                    setSaving(true);
+                                                    const fileExt = file.name.split('.').pop();
+                                                    const fileName = `${profile?.company_id}/${Date.now()}.${fileExt}`;
+
+                                                    // 1. Upload new logo
+                                                    const { error: uploadError } = await supabase.storage
+                                                        .from('company_logos')
+                                                        .upload(fileName, file);
+
+                                                    if (uploadError) throw uploadError;
+
+                                                    // 2. Clean up old logos (Robust cleanup)
+                                                    try {
+                                                        const { data: listData } = await supabase.storage
+                                                            .from('company_logos')
+                                                            .list(profile?.company_id);
+
+                                                        if (listData) {
+                                                            const filesToDelete = listData
+                                                                .filter(f => f.name !== fileName.split('/').pop()) // Don't delete the new one
+                                                                .filter(f => !f.name.startsWith('cover_')) // Don't delete covers
+                                                                .map(f => `${profile?.company_id}/${f.name}`);
+
+                                                            if (filesToDelete.length > 0) {
+                                                                await supabase.storage
+                                                                    .from('company_logos')
+                                                                    .remove(filesToDelete);
+                                                            }
+                                                        }
+                                                    } catch (cleanupError) {
+                                                        console.error('Error cleaning up old logos:', cleanupError);
+                                                    }
+
+                                                    // 3. Get public URL
+                                                    const { data: { publicUrl } } = supabase.storage
+                                                        .from('company_logos')
+                                                        .getPublicUrl(fileName);
+
+                                                    setLogoUrl(publicUrl);
+                                                } catch (error) {
+                                                    console.error('Error uploading logo:', error);
+                                                    addToast('Erro ao fazer upload da logo', 'error');
+                                                } finally {
+                                                    setSaving(false);
+                                                }
+                                            }}
+                                        />
+                                    </label>
                                 )}
                             </div>
 
@@ -265,20 +370,112 @@ export default function SiteCustomization() {
                                     <div className="relative">
                                         <img src={coverImage} alt="Capa" className="w-full h-48 rounded-lg object-cover" />
                                         <button
-                                            onClick={() => setCoverImage('')}
+                                            onClick={() => {
+                                                setConfirmModal({
+                                                    isOpen: true,
+                                                    title: 'Remover imagem de capa',
+                                                    message: 'Tem certeza que deseja remover a imagem de capa? Esta ação não pode ser desfeita.',
+                                                    onConfirm: async () => {
+                                                        try {
+                                                            setSaving(true);
+                                                            if (coverImage && coverImage.includes('company_logos')) {
+                                                                const oldPath = coverImage.split('company_logos/')[1];
+                                                                if (oldPath) {
+                                                                    await supabase.storage
+                                                                        .from('company_logos')
+                                                                        .remove([oldPath]);
+                                                                }
+                                                            }
+                                                            setCoverImage('');
+                                                            await supabase
+                                                                .from('companies')
+                                                                .update({ cover_image: '' })
+                                                                .eq('id', profile?.company_id);
+                                                            addToast('Capa removida com sucesso.', 'success');
+                                                        } catch (error) {
+                                                            console.error('Error removing cover:', error);
+                                                            addToast('Erro ao remover capa.', 'error');
+                                                        } finally {
+                                                            setSaving(false);
+                                                        }
+                                                    }
+                                                });
+                                            }}
                                             className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                            disabled={saving}
                                         >
                                             <X className="w-4 h-4" />
                                         </button>
                                     </div>
                                 ) : (
-                                    <button className={`w-full flex flex-col items-center justify-center gap-2 py-8 rounded-lg border-2 border-dashed transition-colors ${theme === 'dark'
+                                    <label className={`w-full flex flex-col items-center justify-center gap-2 py-8 rounded-lg border-2 border-dashed transition-colors cursor-pointer ${theme === 'dark'
                                         ? 'border-slate-700 hover:border-slate-600 text-slate-400'
                                         : 'border-slate-300 hover:border-slate-400 text-slate-600'
                                         }`}>
                                         <Upload className="w-6 h-6" />
                                         <span className="text-sm font-medium">Adicionar imagem de capa</span>
-                                    </button>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={async (e) => {
+                                                const file = e.target.files?.[0];
+                                                if (!file) return;
+
+                                                if (file.size > 5 * 1024 * 1024) { // 5MB limit for cover
+                                                    addToast('A imagem deve ter no máximo 5MB', 'error');
+                                                    return;
+                                                }
+
+                                                try {
+                                                    setSaving(true);
+                                                    const fileExt = file.name.split('.').pop();
+                                                    // Use a 'covers' folder or prefix
+                                                    const fileName = `${profile?.company_id}/cover_${Date.now()}.${fileExt}`;
+
+                                                    // 1. Upload new cover
+                                                    const { error: uploadError } = await supabase.storage
+                                                        .from('company_logos') // Reusing bucket as likely permissions are same, maybe change if dedicated bucket exists
+                                                        .upload(fileName, file);
+
+                                                    if (uploadError) throw uploadError;
+
+                                                    // 2. Clean up old covers
+                                                    try {
+                                                        const { data: listData } = await supabase.storage
+                                                            .from('company_logos')
+                                                            .list(profile?.company_id);
+
+                                                        if (listData) {
+                                                            const filesToDelete = listData
+                                                                .filter(f => f.name.startsWith('cover_') && f.name !== fileName.split('/').pop())
+                                                                .map(f => `${profile?.company_id}/${f.name}`);
+
+                                                            if (filesToDelete.length > 0) {
+                                                                await supabase.storage
+                                                                    .from('company_logos')
+                                                                    .remove(filesToDelete);
+                                                            }
+                                                        }
+                                                    } catch (cleanupError) {
+                                                        console.error('Error cleaning up old covers:', cleanupError);
+                                                    }
+
+                                                    // 3. Get public URL
+                                                    const { data: { publicUrl } } = supabase.storage
+                                                        .from('company_logos')
+                                                        .getPublicUrl(fileName);
+
+                                                    setCoverImage(publicUrl);
+                                                } catch (error) {
+                                                    console.error('Error uploading cover:', error);
+                                                    addToast('Erro ao fazer upload da capa', 'error');
+                                                } finally {
+                                                    setSaving(false);
+                                                }
+                                            }}
+                                        />
+                                    </label>
                                 )}
                             </div>
 
@@ -381,6 +578,16 @@ export default function SiteCustomization() {
                     )}
                 </div>
             </div>
+
+            {/* Confirm Modal */}
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                onConfirm={confirmModal.onConfirm}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                variant="danger"
+            />
         </div>
     );
 }

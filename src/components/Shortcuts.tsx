@@ -5,7 +5,7 @@ export default function Shortcuts() {
     // const { theme } = useTheme();
 
     const shortcuts = [
-        { icon: <Calendar className="w-6 h-6" />, label: 'Novo evento', color: 'text-purple-600', borderColor: 'border-purple-200 hover:border-purple-400' },
+        { icon: <Calendar className="w-6 h-6" />, label: 'Agenda', color: 'text-purple-600', borderColor: 'border-purple-200 hover:border-purple-400' },
         { icon: <Ban className="w-6 h-6" />, label: 'Novo bloqueio', color: 'text-purple-600', borderColor: 'border-purple-200 hover:border-purple-400' },
         { icon: <UserPlus className="w-6 h-6" />, label: 'Novo cliente', color: 'text-blue-600', borderColor: 'border-blue-200 hover:border-blue-400' },
         { icon: <Store className="w-6 h-6" />, label: 'Atrair clientes', color: 'text-blue-600', borderColor: 'border-blue-200 hover:border-blue-400' },

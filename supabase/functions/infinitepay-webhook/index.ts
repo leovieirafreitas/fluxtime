@@ -21,24 +21,55 @@ serve(async (req) => {
 
         const { order_nsu, transaction_nsu, paid_amount, capture_method } = payload
 
+        // Map capture_method to our payment_method enum
+        let paymentMethod = 'pix';
+        if (capture_method === 'credit' || capture_method === 'credit_card') paymentMethod = 'credit_card';
+        else if (capture_method === 'debit' || capture_method === 'debit_card') paymentMethod = 'debit_card';
+        else if (capture_method === 'pix') paymentMethod = 'pix';
+
         if (order_nsu) {
-            // Update appointment status to 'paid'
-            // storing transaction details in metadata if possible or just marking paid
-
-            const { error } = await supabaseClient
-                .from('appointments')
-                .update({
-                    payment_status: 'paid',
-                    // Optionally store transaction ID in notes or a specific column if existed
-                    // For now just mark paid
-                })
+            // First, check if this is a pending booking (reservation fee payment)
+            const { data: pendingBooking } = await supabaseClient
+                .from('pending_bookings')
+                .select('*')
                 .eq('id', order_nsu)
+                .single()
 
-            if (error) {
-                console.error('Error updating appointment:', error)
-                // Even if internal update fails, we might want to return 200 to InfinitePay so they don't retry forever? 
-                // Or 400 to retry? Docs say 400 they retry.
-                throw error
+            if (pendingBooking) {
+                // This is a pending booking - convert it to an appointment
+                console.log(`Converting pending booking ${order_nsu} to appointment after payment via ${paymentMethod}`)
+
+                const { data: appointmentId, error: confirmError } = await supabaseClient
+                    .rpc('confirm_pending_booking', {
+                        p_pending_id: order_nsu,
+                        p_payment_method: paymentMethod
+                    })
+
+                if (confirmError) {
+                    console.error('Error confirming pending booking:', confirmError)
+                    throw confirmError
+                }
+
+                console.log(`Pending booking ${order_nsu} converted to appointment ${appointmentId}`)
+            } else {
+                // This is a regular appointment payment (e.g., remaining amount)
+                console.log(`Updating existing appointment ${order_nsu} payment to paid via ${paymentMethod}`)
+
+                const { error } = await supabaseClient
+                    .from('appointments')
+                    .update({
+                        payment_status: 'paid',
+                        status: 'confirmed',
+                        payment_method: paymentMethod
+                    })
+                    .eq('id', order_nsu)
+
+                if (error) {
+                    console.error('Error updating appointment:', error)
+                    throw error
+                }
+
+                console.log(`Appointment ${order_nsu} payment confirmed`)
             }
         }
 

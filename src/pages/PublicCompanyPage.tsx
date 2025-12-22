@@ -3,9 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { whatsappService } from '../services/whatsapp';
 import { MapPin, Clock, X, Star, Instagram, Facebook, Globe, MessageCircle, BookOpen, Tag, LogOut, User, Lock, ChevronDown, Check } from 'lucide-react';
-import DatePicker from '../components/DatePicker';
 import OTPInput from '../components/OTPInput';
 import { getClientSession, clearClientSession } from '../lib/clientSession';
+import { useToast } from '../contexts/ToastContext';
 
 interface Company {
     id: string;
@@ -31,6 +31,8 @@ interface Service {
     price: number;
     category_id: string | null;
     slot_interval_minutes?: number | null;
+    reservation_fee?: number | null;
+    is_reservation_fee_enabled?: boolean;
 }
 
 
@@ -73,6 +75,7 @@ type BookingStep = typeof BookingStep[keyof typeof BookingStep];
 export default function PublicCompanyPage() {
     const { slug } = useParams<{ slug: string }>();
     const navigate = useNavigate();
+    const { addToast } = useToast();
     const [company, setCompany] = useState<Company | null>(null);
     const [services, setServices] = useState<Service[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -89,6 +92,14 @@ export default function PublicCompanyPage() {
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
     const [busySlots, setBusySlots] = useState<{ start: number, end: number }[]>([]);
+    const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => {
+        const d = new Date();
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is sunday
+        d.setDate(diff);
+        d.setHours(0, 0, 0, 0);
+        return d;
+    });
 
     // Initialize client state synchronously from localStorage to prevent flash
     // Initialize client state synchronously
@@ -266,24 +277,26 @@ export default function PublicCompanyPage() {
 
     const fetchCompanyData = async () => {
         try {
-            // Check if slug is a UUID (company ID) or a slug
-            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug || '');
-
+            // Strategy: Try by ID (most common now), fallback to Slug
             let data, error;
 
-            if (isUUID) {
-                // Fetch by ID
-                const result = await supabase
-                    .rpc('get_public_company_data_by_id', { p_company_id: slug });
-                data = result.data;
-                error = result.error;
-            } else {
-                // Fetch by slug
-                const result = await supabase
+            // 1. Try Fetch by ID
+            let result = await supabase
+                .rpc('get_public_company_data_by_id', { p_company_id: slug });
+
+            // 2. If no data, try Fetch by Slug
+            if (!result.data || result.data.length === 0 || result.error) {
+                // Only try slug if ID failed (silent fail on ID to allow fallback)
+                const slugResult = await supabase
                     .rpc('get_public_company_data', { p_slug: slug });
-                data = result.data;
-                error = result.error;
+
+                if (slugResult.data && slugResult.data.length > 0) {
+                    result = slugResult;
+                }
             }
+
+            data = result.data;
+            error = result.error;
 
             if (error) throw error;
             if (!data || data.length === 0) {
@@ -363,7 +376,7 @@ export default function PublicCompanyPage() {
         e.preventDefault();
 
         if (!reviewRating || !reviewName.trim() || !company) {
-            alert('Por favor, preencha seu nome e selecione uma avaliação.');
+            addToast('Por favor, preencha seu nome e selecione uma avaliação.', 'error');
             return;
         }
 
@@ -394,7 +407,7 @@ export default function PublicCompanyPage() {
             setTimeout(() => setReviewSubmitted(false), 3000);
         } catch (error) {
             console.error('Error submitting review:', error);
-            alert('Erro ao enviar avaliação. Tente novamente.');
+            addToast('Erro ao enviar avaliação. Tente novamente.', 'error');
         } finally {
             setSubmittingReview(false);
         }
@@ -459,7 +472,6 @@ export default function PublicCompanyPage() {
                     .eq('payment_status', 'paid')
                     .order('start_time', { ascending: false });
 
-                // Also fetch existing reviews to filter them out
                 // Also fetch existing reviews to filter them out
                 const { data: existingReviews } = await supabase
                     .from('reviews')
@@ -580,26 +592,97 @@ export default function PublicCompanyPage() {
             const cleanPhone = clientPhone.replace(/\D/g, '');
             const normalizedPhone = cleanPhone.startsWith('55') ? `+${cleanPhone}` : `+55${cleanPhone}`;
 
-            const { error } = await supabase.rpc('public_create_appointment', {
-                p_company_id: company.id,
-                p_client_id: finalClientId,
-                p_service_id: selectedService.id,
-                p_professional_id: selectedProfessional.id,
-                p_start_time: startTime.toISOString(),
-                p_end_time: endTime.toISOString(),
-                p_client_name: clientName,
-                p_client_phone: normalizedPhone,
-                p_client_email: clientEmail,
-                p_notes: clientObs,
-                p_coupon_code: appliedCoupon ? appliedCoupon.code : null
-            });
+            // Check if service has reservation fee enabled
+            const hasReservationFee = selectedService.is_reservation_fee_enabled &&
+                selectedService.reservation_fee &&
+                selectedService.reservation_fee > 0;
 
-            if (error) throw error;
+            if (hasReservationFee) {
+                // 1. Create Pending Booking
+                const { data: bookingId, error: bookingError } = await supabase.rpc('public_create_pending_booking', {
+                    p_company_id: company.id,
+                    p_client_id: finalClientId,
+                    p_service_id: selectedService.id,
+                    p_professional_id: selectedProfessional.id,
+                    p_start_time: startTime.toISOString(),
+                    p_end_time: endTime.toISOString(),
+                    p_client_name: clientName,
+                    p_client_phone: normalizedPhone,
+                    p_client_email: clientEmail,
+                    p_notes: clientObs,
+                    p_coupon_code: appliedCoupon ? appliedCoupon.code : null
+                });
 
-            setBookingStep(BookingStep.SUCCESS);
-        } catch (err) {
+                if (bookingError) throw bookingError;
+
+                // 2. Fetch InfinitePay Tag (Secure RPC)
+                const { data: tag, error: tagError } = await supabase.rpc('get_company_infinitepay_tag', {
+                    p_company_id: company.id
+                });
+
+                if (tagError || !tag) {
+                    console.error('Erro ao obter tag InfinitePay:', tagError);
+                    addToast('Erro na configuração de pagamento do estabelecimento.', 'error');
+                    return;
+                }
+
+                // 3. Generate Payment Link Locally (No Edge Function needed)
+                const handle = tag.replace('$', '').replace('@', '').trim();
+                const cleanHandle = handle.replace(/[^a-zA-Z0-9_-]/g, '');
+
+                const amountInCents = Math.round((selectedService.reservation_fee || 0) * 100);
+                const itemName = `Taxa de Reserva - ${selectedService.name}`;
+
+                const items = [{
+                    quantity: 1,
+                    price: amountInCents, // InfinitePay URL uses 'price' in cents
+                    name: itemName
+                }];
+
+                const params = new URLSearchParams();
+                params.append('items', JSON.stringify(items));
+                params.append('order_nsu', bookingId);
+
+                // Redirect back to client dashboard with success flag and pending ID
+                const redirectUrl = `${window.location.origin}/client/dashboard?payment_success=true&pending_id=${bookingId}`;
+                params.append('redirect_url', redirectUrl);
+
+                if (clientName) {
+                    params.append('customer_name', clientName);
+                }
+
+                const checkoutUrl = `https://checkout.infinitepay.io/${cleanHandle}?${params.toString()}`;
+
+                // 4. Redirect to Payment
+                window.location.href = checkoutUrl;
+
+            } else {
+                // No reservation fee - Regular Appointment
+                const { error } = await supabase.rpc('public_create_appointment', {
+                    p_company_id: company.id,
+                    p_client_id: finalClientId,
+                    p_service_id: selectedService.id,
+                    p_professional_id: selectedProfessional.id,
+                    p_start_time: startTime.toISOString(),
+                    p_end_time: endTime.toISOString(),
+                    p_client_name: clientName,
+                    p_client_phone: normalizedPhone,
+                    p_client_email: clientEmail,
+                    p_notes: clientObs,
+                    p_coupon_code: appliedCoupon ? appliedCoupon.code : null
+                });
+
+                if (error) throw error;
+                setBookingStep(BookingStep.SUCCESS);
+            }
+        } catch (err: any) {
             console.error("Error creating booking:", err);
-            alert("Erro ao realizar agendamento. Tente novamente.");
+            // Handle specific case where function might not exist yet
+            if (err.message?.includes('function public_create_pending_booking does not exist')) {
+                addToast('Erro de configuração no servidor. Por favor, contate o administrador.', 'error');
+            } else {
+                addToast('Erro ao realizar agendamento. Tente novamente.', 'error');
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -670,18 +753,18 @@ export default function PublicCompanyPage() {
 
     const handleSendCode = async () => {
         if (!clientPhone) {
-            alert("Digite seu número de celular.");
+            addToast('Digite seu número de celular.', 'error');
             return;
         }
 
         // Validate if we are in "Registration Mode" (fields are visible)
         if (showRegistrationFields) {
             if (!clientName.trim()) {
-                alert("Digite seu nome completo.");
+                addToast('Digite seu nome completo.', 'error');
                 return;
             }
             if (!clientEmail.trim()) {
-                alert("Digite seu e-mail.");
+                addToast('Digite seu e-mail.', 'error');
                 return;
             }
         } else {
@@ -715,7 +798,7 @@ export default function PublicCompanyPage() {
             setBookingStep(BookingStep.CLIENT_VERIFICATION);
             setTimeLeft(30);
         } catch (error) {
-            alert("Erro ao enviar código. Tente novamente ou verifique o número.");
+            addToast('Erro ao enviar código. Tente novamente ou verifique o número.', 'error');
         } finally {
             setLoading(false);
         }
@@ -723,7 +806,7 @@ export default function PublicCompanyPage() {
 
     const handleVerifyAndBook = async () => {
         if (verificationCode !== generatedOtp && verificationCode !== '000000') {
-            alert("Código incorreto.");
+            addToast("Código incorreto.", 'error');
             return;
         }
 
@@ -760,7 +843,7 @@ export default function PublicCompanyPage() {
 
         } catch (error: any) {
             console.error("Error finalizing:", error);
-            alert(`Erro ao finalizar: ${error.message || JSON.stringify(error)}`);
+            addToast(`Erro ao finalizar: ${error.message || JSON.stringify(error)}`, 'error');
             setIsSubmitting(false);
         }
     };
@@ -780,18 +863,18 @@ export default function PublicCompanyPage() {
             if (error) throw error;
 
             if (!data) {
-                alert('Cupom inválido ou não encontrado.');
+                addToast('Cupom inválido ou não encontrado.', 'error');
                 setAppliedCoupon(null);
                 return;
             }
 
             if (data.expiration_date && new Date(data.expiration_date) < new Date()) {
-                alert('Cupom expirado.');
+                addToast('Cupom expirado.', 'error');
                 setAppliedCoupon(null);
                 return;
             }
             if (data.max_uses && data.used_count >= data.max_uses) {
-                alert('Limite de uso atingido para este cupom.');
+                addToast('Limite de uso atingido para este cupom.', 'error');
                 setAppliedCoupon(null);
                 return;
             }
@@ -804,7 +887,7 @@ export default function PublicCompanyPage() {
 
         } catch (error) {
             console.error(error);
-            alert('Erro ao validar cupom.');
+            addToast('Erro ao validar cupom.', 'error');
         } finally {
             setValidatingCoupon(false);
         }
@@ -1057,15 +1140,7 @@ export default function PublicCompanyPage() {
                         </div>
                     )}
 
-                    {!isBookingMode && (
-                        <button
-                            onClick={() => { setIsBookingMode(true); setBookingStep(BookingStep.SELECT_SERVICE); }}
-                            style={{ backgroundColor: accentColor }}
-                            className="px-6 py-2.5 text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
-                        >
-                            Agendar agora
-                        </button>
-                    )}
+
                 </div>
             </header>
 
@@ -1138,6 +1213,11 @@ export default function PublicCompanyPage() {
                                                         <p className="text-xl font-bold" style={{ color: accentColor }}>
                                                             {formatPrice(service.price)}
                                                         </p>
+                                                        {service.is_reservation_fee_enabled && (
+                                                            <p className="text-xs font-semibold text-slate-500 mt-1">
+                                                                + Taxa de reserva: {formatPrice(service.reservation_fee || 0)}
+                                                            </p>
+                                                        )}
                                                     </div>
                                                     <div style={{ color: accentColor }} className="opacity-0 group-hover:opacity-100 transition-opacity font-medium text-sm flex items-center gap-1">
                                                         Agendar
@@ -1454,6 +1534,11 @@ export default function PublicCompanyPage() {
                                                             <p className="text-xl font-bold" style={{ color: accentColor }}>
                                                                 {formatPrice(service.price)}
                                                             </p>
+                                                            {service.is_reservation_fee_enabled && (
+                                                                <p className="text-xs font-semibold text-slate-500 mt-1">
+                                                                    + Taxa de reserva: {formatPrice(service.reservation_fee || 0)}
+                                                                </p>
+                                                            )}
                                                         </div>
                                                         <div style={{ color: accentColor }} className="opacity-0 group-hover:opacity-100 transition-opacity font-medium text-sm flex items-center gap-1">
                                                             Selecionar
@@ -1527,47 +1612,149 @@ export default function PublicCompanyPage() {
                                         </div>
                                         <div className="space-y-6">
                                             {/* Date Picker with Dropdown */}
+                                            {/* Horizontal Week Calendar */}
                                             <div className="bg-white rounded-xl border border-slate-200 p-6">
-                                                <label className="block text-sm font-medium text-slate-700 mb-2">Data</label>
-                                                <div className="relative">
-                                                    <input
-                                                        type="text"
-                                                        readOnly
-                                                        value={selectedDate.toLocaleDateString('pt-BR')}
-                                                        onClick={() => {
-                                                            const dropdown = document.getElementById('date-picker-dropdown');
-                                                            if (dropdown) {
-                                                                dropdown.classList.toggle('hidden');
-                                                            }
-                                                        }}
-                                                        className="w-full p-3 rounded-lg border border-slate-300 bg-white text-slate-900 font-medium cursor-pointer hover:border-blue-500 transition-colors"
-                                                        placeholder="Selecione uma data"
-                                                    />
-                                                    <svg className="w-5 h-5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                    </svg>
+                                                <label className="block text-sm font-medium text-slate-700 mb-4">Selecione a Data</label>
 
-                                                    {/* Dropdown Calendar */}
-                                                    <div id="date-picker-dropdown" className="hidden absolute top-full left-0 mt-2 z-50">
-                                                        <DatePicker
-                                                            selectedDate={selectedDate}
-                                                            onDateChange={(date) => {
-                                                                setSelectedDate(date);
-                                                                const dropdown = document.getElementById('date-picker-dropdown');
-                                                                if (dropdown) {
-                                                                    dropdown.classList.add('hidden');
-                                                                }
-                                                            }}
-                                                            accentColor={accentColor}
-                                                            minDate={new Date()}
-                                                            maxDate={(() => {
-                                                                const max = new Date();
-                                                                max.setDate(max.getDate() + schedulingWindowDays);
-                                                                return max;
-                                                            })()}
-                                                        />
-                                                    </div>
-                                                </div>
+                                                {(() => {
+                                                    const today = new Date();
+                                                    today.setHours(0, 0, 0, 0);
+
+                                                    // State to track the "Monday" of the view we are currently looking at
+                                                    // Initialize it to the Monday of the current week
+
+
+                                                    const maxAllowedDate = new Date();
+                                                    maxAllowedDate.setDate(maxAllowedDate.getDate() + schedulingWindowDays);
+                                                    maxAllowedDate.setHours(23, 59, 59, 999);
+
+                                                    const goToNextWeek = () => {
+                                                        const next = new Date(currentWeekStart);
+                                                        next.setDate(next.getDate() + 7);
+                                                        setCurrentWeekStart(next);
+                                                    };
+
+                                                    const goToPrevWeek = () => {
+                                                        const prev = new Date(currentWeekStart);
+                                                        prev.setDate(prev.getDate() - 7);
+                                                        setCurrentWeekStart(prev);
+                                                    };
+
+                                                    const weekDays = [];
+                                                    for (let i = 0; i < 7; i++) {
+                                                        const day = new Date(currentWeekStart);
+                                                        day.setDate(day.getDate() + i);
+                                                        weekDays.push(day);
+                                                    }
+
+                                                    // Determine if we can go to next week (if any day in next week is within max window)
+                                                    const nextWeekStart = new Date(currentWeekStart);
+                                                    nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+
+                                                    // If window is small (<= 7 days), restrict to current week view only
+                                                    const canNext = schedulingWindowDays > 7 && nextWeekStart <= maxAllowedDate;
+                                                    // Strict: check if ANY day of next week is <= maxAllowedDate? 
+                                                    // Actually, if nextWeekStart > maxAllowedDate, then the whole week is out.
+
+                                                    // Determine if we can go to prev week (if end of prev week >= today)
+                                                    const prevWeekStart = new Date(currentWeekStart);
+                                                    prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+                                                    const prevWeekEnd = new Date(prevWeekStart);
+                                                    prevWeekEnd.setDate(prevWeekEnd.getDate() + 6);
+                                                    prevWeekEnd.setHours(23, 59, 59, 999);
+                                                    const canPrev = prevWeekEnd >= today;
+
+
+                                                    return (
+                                                        <div className="flex flex-col gap-4">
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <span className="text-sm font-medium text-slate-500 capitalize">
+                                                                    {currentWeekStart.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                                                                </span>
+                                                                <div className="flex gap-2">
+                                                                    <button
+                                                                        onClick={goToPrevWeek}
+                                                                        disabled={!canPrev}
+                                                                        className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-full border transition-colors ${!canPrev ? 'opacity-30 cursor-not-allowed border-transparent' : 'hover:bg-slate-50 border-slate-200 text-slate-700'}`}
+                                                                    >
+                                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                                                        </svg>
+                                                                        Anterior
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            console.log('Window:', schedulingWindowDays, 'Max:', maxAllowedDate);
+                                                                            goToNextWeek();
+                                                                        }}
+                                                                        disabled={!canNext}
+                                                                        className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-full border transition-colors ${!canNext ? 'opacity-30 cursor-not-allowed border-transparent' : 'hover:bg-slate-50 border-slate-200 text-slate-700'}`}
+                                                                    >
+                                                                        Próxima
+                                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                                        </svg>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="grid grid-cols-7 gap-2">
+                                                                {weekDays.map((date) => {
+                                                                    const isSelected = date.toDateString() === selectedDate.toDateString();
+                                                                    // Check if disabled
+
+                                                                    // Check if disabled
+                                                                    const dateStart = new Date(date);
+                                                                    dateStart.setHours(0, 0, 0, 0);
+
+                                                                    const isPast = dateStart < today;
+                                                                    const isFutureBlocked = dateStart > maxAllowedDate;
+                                                                    const isDisabled = isPast || isFutureBlocked;
+
+                                                                    const dayName = date.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
+                                                                    const dayNumber = date.getDate();
+
+                                                                    return (
+                                                                        <button
+                                                                            key={date.toISOString()}
+                                                                            onClick={() => {
+                                                                                if (!isDisabled) {
+                                                                                    setSelectedDate(date);
+                                                                                }
+                                                                            }}
+                                                                            disabled={isDisabled}
+                                                                            className={`
+                                                                                flex flex-col items-center justify-center py-3 rounded-lg border transition-all
+                                                                                ${isSelected
+                                                                                    ? 'ring-2 ring-offset-1'
+                                                                                    : 'hover:border-slate-300'
+                                                                                }
+                                                                                ${isDisabled
+                                                                                    ? 'opacity-40 bg-slate-50 border-slate-100 cursor-not-allowed'
+                                                                                    : isSelected
+                                                                                        ? 'bg-white border-transparent shadow-sm'
+                                                                                        : 'bg-white border-slate-200'
+                                                                                }
+                                                                            `}
+                                                                            style={isSelected && !isDisabled ? {
+                                                                                borderColor: accentColor,
+                                                                                backgroundColor: `${accentColor}10`, // 10% opacity
+                                                                                color: accentColor
+                                                                            } : {}}
+                                                                        >
+                                                                            <span className={`text-xs font-medium uppercase mb-1 ${isSelected ? '' : 'text-slate-500'}`}>
+                                                                                {dayName}
+                                                                            </span>
+                                                                            <span className={`text-lg font-bold ${isSelected ? '' : 'text-slate-900'}`}>
+                                                                                {dayNumber}
+                                                                            </span>
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
                                             </div>
 
                                             {/* Time Slots */}
@@ -1761,6 +1948,28 @@ export default function PublicCompanyPage() {
                                             )}
                                         </div>
 
+                                        {/* Reservation Fee Notice */}
+                                        {selectedService?.is_reservation_fee_enabled && selectedService?.reservation_fee && selectedService.reservation_fee > 0 && (
+                                            <div className="mt-4 bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex-shrink-0 w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+                                                        <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <h4 className="font-bold text-blue-900 mb-1">Taxa de Reserva Obrigatória</h4>
+                                                        <p className="text-sm text-blue-800 mb-2">
+                                                            Para confirmar este agendamento, é necessário pagar uma taxa de reserva de <span className="font-bold">{formatPrice(selectedService.reservation_fee)}</span>.
+                                                        </p>
+                                                        <p className="text-xs text-blue-700">
+                                                            Você será redirecionado para a página de pagamento após confirmar.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
                                         <button
                                             onClick={isClientLoggedIn ? async () => {
                                                 setIsSubmitting(true);
@@ -1790,7 +1999,7 @@ export default function PublicCompanyPage() {
                                                     }
                                                 } catch (e: any) {
                                                     console.error("Error in instant booking:", e);
-                                                    alert(`Erro ao agendar: ${e.message || "Tente novamente."}`);
+                                                    addToast(`Erro ao agendar: ${e.message || "Tente novamente."}`, 'error');
                                                     setIsSubmitting(false);
                                                 }
                                             } : handleSendCode}
@@ -2107,3 +2316,4 @@ export default function PublicCompanyPage() {
         </div >
     );
 }
+

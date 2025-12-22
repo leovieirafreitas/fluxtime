@@ -23,9 +23,12 @@ import Reviews from './pages/Reviews';
 import Links from './pages/Links';
 import ClientDetails from './pages/ClientDetails';
 import { UserProfileProvider } from './contexts/UserProfileContext';
+import { ToastProvider } from './contexts/ToastContext';
 
 
 import Coupons from './pages/Coupons';
+import Transactions from './pages/Transactions';
+
 
 function App() {
   const [session, setSession] = useState<any>(null);
@@ -57,98 +60,104 @@ function App() {
   return (
     <BrowserRouter>
       <UserProfileProvider>
-        <Routes>
-          {/* Client Portal Routes */}
-          <Route path="/client" element={<ClientLogin />} />
-          <Route path="/client/dashboard" element={<ClientDashboard />} />
+        <ToastProvider>
+          <Routes>
+            {/* Client Portal Routes */}
+            <Route path="/client" element={<ClientLogin />} />
+            <Route path="/client/dashboard" element={<ClientDashboard />} />
 
-          {/* Rota Pública - Página da Empresa por ID */}
-          <Route path="/book/:slug" element={<PublicCompanyPage />} />
+            {/* Rota Pública - Página da Empresa por ID */}
+            <Route path="/book/:slug" element={<PublicCompanyPage />} />
 
-          {/* Rota Pública - Página da Empresa por Slug */}
-          <Route path="/:slug" element={<PublicCompanyPage />} />
+            {/* Rota Pública - Página da Empresa por Slug */}
+            <Route path="/:slug" element={<PublicCompanyPage />} />
 
-          <Route
-            path="/login"
-            element={session ? <Navigate to="/dashboard" /> : <Login />}
-          />
-          <Route
-            path="/dashboard"
-            element={session ? <Dashboard /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/clients"
-            element={session ? <Clients /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/settings/company"
-            element={session ? <CompanySettings /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/settings/timezone"
-            element={session ? <TimezoneSettings /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/settings/schedule"
-            element={session ? <BusinessHoursSettings /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/settings/rules"
-            element={session ? <SchedulingRules /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/settings/team"
-            element={session ? <Team /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/appointments"
-            element={session ? <Appointments /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/settings/payments"
-            element={session ? <PaymentSettings /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/site/customization"
-            element={session ? <SiteCustomization /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/site/reviews"
-            element={session ? <Reviews /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/site/links"
-            element={session ? <Links /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/catalog/services"
-            element={session ? <Services /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/catalog/coupons"
-            element={session ? <Coupons /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/catalog/combos"
-            element={session ? <ServiceCategories /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/catalog/services/new"
-            element={session ? <NewService /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/catalog/services/:id"
-            element={session ? <NewService /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/"
-            element={<Navigate to={session ? "/dashboard" : "/login"} />}
-          />
-          <Route
-            path="/clients/:id"
-            element={session ? <ClientDetails /> : <Navigate to="/login" />}
-          />
-        </Routes>
+            <Route
+              path="/login"
+              element={session ? <Navigate to="/dashboard" /> : <Login />}
+            />
+            <Route
+              path="/dashboard"
+              element={session ? <Dashboard /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/clients"
+              element={session ? <Clients /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/settings/company"
+              element={session ? <CompanySettings /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/settings/timezone"
+              element={session ? <TimezoneSettings /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/settings/schedule"
+              element={session ? <BusinessHoursSettings /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/settings/rules"
+              element={session ? <SchedulingRules /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/settings/team"
+              element={session ? <Team /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/appointments"
+              element={session ? <Appointments /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/settings/payments"
+              element={session ? <PaymentSettings /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/site/customization"
+              element={session ? <SiteCustomization /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/site/reviews"
+              element={session ? <Reviews /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/site/links"
+              element={session ? <Links /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/catalog/services"
+              element={session ? <Services /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/catalog/coupons"
+              element={session ? <Coupons /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/catalog/combos"
+              element={session ? <ServiceCategories /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/catalog/services/new"
+              element={session ? <NewService /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/catalog/services/:id"
+              element={session ? <NewService /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/"
+              element={<Navigate to={session ? "/dashboard" : "/login"} />}
+            />
+            <Route
+              path="/clients/:id"
+              element={session ? <ClientDetails /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/financial/transactions"
+              element={session ? <Transactions /> : <Navigate to="/login" />}
+            />
+          </Routes>
+        </ToastProvider>
       </UserProfileProvider>
     </BrowserRouter>
   );

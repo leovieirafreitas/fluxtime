@@ -14,7 +14,10 @@ interface Coupon {
     active: boolean;
 }
 
+import { useToast } from '../contexts/ToastContext';
+
 export default function Coupons() {
+    const { addToast } = useToast();
     const { profile } = useUserProfileContext();
     const [coupons, setCoupons] = useState<Coupon[]>([]);
     const [loading, setLoading] = useState(true);
@@ -66,7 +69,7 @@ export default function Coupons() {
             setCoupons(coupons.filter(c => c.id !== id));
         } catch (error) {
             console.error('Error deleting coupon:', error);
-            alert('Erro ao excluir cupom.');
+            addToast('Erro ao excluir cupom.', 'error');
         }
     };
 
@@ -98,7 +101,7 @@ export default function Coupons() {
             fetchCoupons();
         } catch (error) {
             console.error('Error creating coupon:', error);
-            alert('Erro ao criar cupom. Verifique se o código já existe.');
+            addToast('Erro ao criar cupom. Verifique se o código já existe.', 'error');
         }
     };
 

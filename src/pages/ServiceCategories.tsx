@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useUserProfileContext } from '../contexts/UserProfileContext';
+import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
 import Sidebar from '../components/Sidebar';
 import { Menu, Plus, Pencil, Trash2, X, Tags } from 'lucide-react';
@@ -16,6 +17,7 @@ interface Category {
 export default function ServiceCategories() {
     const { theme } = useTheme();
     const { profile } = useUserProfileContext();
+    const { addToast } = useToast();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     const [categories, setCategories] = useState<Category[]>([]);
@@ -92,9 +94,10 @@ export default function ServiceCategories() {
 
             if (error) throw error;
             fetchCategories();
+            addToast('Categoria excluída com sucesso!', 'success');
         } catch (error) {
             console.error('Error deleting category:', error);
-            alert('Erro ao excluir categoria.');
+            addToast('Erro ao excluir categoria.', 'error');
         }
     };
 
@@ -130,10 +133,11 @@ export default function ServiceCategories() {
                 if (error) throw error;
             }
             fetchCategories();
+            fetchCategories();
             handleCloseModal();
         } catch (error) {
             console.error('Error saving category:', error);
-            alert('Erro ao salvar categoria.');
+            addToast('Erro ao salvar categoria.', 'error');
         } finally {
             setSaving(false);
         }

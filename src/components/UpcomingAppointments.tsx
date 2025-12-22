@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Clock } from 'lucide-react';
+import { Calendar, Clock, DollarSign } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { dashboardCache, type UpcomingAppointment } from '../lib/dashboardCache';
@@ -30,7 +30,10 @@ export default function UpcomingAppointments() {
                     client_name,
                     start_time,
                     status,
+                    payment_status,
                     total_amount,
+                    remaining_amount,
+                    discount,
                     service:services(name, price)
                 `)
                 .eq('company_id', profile.company_id)
@@ -76,6 +79,26 @@ export default function UpcomingAppointments() {
         return new Date(dateString).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     };
 
+    const calculatePendingAmount = (apt: any) => {
+        // Se já está pago, não tem pendência
+        if (apt.payment_status === 'paid') return 0;
+
+        // Se cancelado, não tem pendência
+        if (apt.status === 'cancelled') return 0;
+
+        // PRIORITY 1: Se tem remaining_amount explícito
+        if (apt.remaining_amount !== null && apt.remaining_amount !== undefined && apt.remaining_amount > 0) {
+            return apt.remaining_amount;
+        }
+
+        const price = apt.service?.price || 0;
+        const discount = apt.discount || 0;
+        const paid = apt.total_amount || 0;
+
+        // Cálculo Pendente com Desconto
+        return Math.max(0, price - discount - paid);
+    };
+
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-slide-up" style={{ animationDelay: '0.3s', animationFillMode: 'both' }}>
             <div className="glass rounded-2xl p-6">
@@ -91,32 +114,48 @@ export default function UpcomingAppointments() {
                     </div>
                 ) : (
                     <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
-                        {appointments.map((appointment) => (
-                            <div key={appointment.id} className="w-full glass-hover rounded-xl p-4 cursor-pointer border border-slate-100/50">
-                                <div className="flex items-start justify-between mb-2">
-                                    <div>
-                                        <h3 className="font-semibold text-dark-100">{appointment.client_name}</h3>
-                                        <p className="text-sm text-dark-400">{appointment.service?.name}</p>
+                        {appointments.map((appointment) => {
+                            const pendingValue = calculatePendingAmount(appointment);
+                            return (
+                                <div key={appointment.id} className="w-full glass-hover rounded-xl p-4 cursor-pointer border border-slate-100/50">
+                                    <div className="flex items-start justify-between mb-2">
+                                        <div>
+                                            <h3 className="font-semibold text-dark-100">{appointment.client_name}</h3>
+                                            <p className="text-sm text-dark-400">{appointment.service?.name}</p>
+                                        </div>
+                                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(appointment.status)}`}>
+                                            {getStatusLabel(appointment.status)}
+                                        </span>
                                     </div>
-                                    <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(appointment.status)}`}>
-                                        {getStatusLabel(appointment.status)}
-                                    </span>
+                                    <div className="flex items-center gap-4 text-sm text-dark-400">
+                                        <div className="flex items-center gap-1">
+                                            <Calendar className="w-4 h-4" />
+                                            <span>{formatDate(appointment.start_time)}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <Clock className="w-4 h-4" />
+                                            <span>{formatTime(appointment.start_time)}</span>
+                                        </div>
+                                        <div className="ml-auto flex flex-col items-end">
+                                            <div className="font-medium text-slate-900">
+                                                {/* Mostra o valor pendente. Se for 0 (já pago), mostra "Pago" */}
+                                                {appointment.payment_status === 'paid'
+                                                    ? <span className="text-emerald-500 font-bold">Pago</span>
+                                                    : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pendingValue)
+                                                }
+                                            </div>
+                                            {/* Mostra taxa paga se houver pendência restante */}
+                                            {appointment.payment_status !== 'paid' && (appointment.total_amount || 0) > 0 && pendingValue > 0 && (
+                                                <div className="text-[10px] text-emerald-600 font-medium bg-emerald-50 px-1.5 py-0.5 rounded-full mt-0.5 border border-emerald-100 flex items-center gap-1">
+                                                    <span>✓</span>
+                                                    Pago R$ {new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(appointment.total_amount || 0)}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-4 text-sm text-dark-400">
-                                    <div className="flex items-center gap-1">
-                                        <Calendar className="w-4 h-4" />
-                                        <span>{formatDate(appointment.start_time)}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <Clock className="w-4 h-4" />
-                                        <span>{formatTime(appointment.start_time)}</span>
-                                    </div>
-                                    <div className="ml-auto font-medium text-slate-900">
-                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(appointment.total_amount ?? appointment.service?.price ?? 0)}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>
@@ -125,13 +164,12 @@ export default function UpcomingAppointments() {
                 <h2 className="text-lg font-semibold mb-4">Valor a receber (Próximos)</h2>
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                     <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4">
-                        <span className="text-3xl">💰</span>
+                        <DollarSign className="w-8 h-8 text-emerald-500" />
                     </div>
                     <p className="text-4xl font-bold mb-2">
                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
                             appointments.reduce((acc, curr) => {
-                                if (curr.status === 'cancelled') return acc;
-                                return acc + (curr.total_amount ?? curr.service?.price ?? 0);
+                                return acc + calculatePendingAmount(curr);
                             }, 0)
                         )}
                     </p>
