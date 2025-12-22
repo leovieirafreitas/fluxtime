@@ -142,7 +142,8 @@ export default function Transactions() {
 
                 // 1. Definição correta do valor pago (Evita contar valor total como 'pago' erroneamente)
                 const servicePrice = apt.service?.price || 0;
-                const totalAmount = (apt.total_amount !== null && apt.total_amount !== undefined) ? apt.total_amount : servicePrice;
+                const discount = (apt.discount || 0);
+                const totalAmount = (apt.total_amount !== null && apt.total_amount !== undefined) ? apt.total_amount : Math.max(0, servicePrice - discount);
                 const remaining = apt.remaining_amount;
 
                 let paidAmount = 0;
@@ -175,7 +176,6 @@ export default function Transactions() {
                     }
                 }
 
-                const discount = (apt.discount || 0);
                 const effectivePrice = Math.max(0, servicePrice - discount);
 
                 // Cálculo inteligente do valor da transação
@@ -675,7 +675,8 @@ export default function Transactions() {
                                                         {transaction.payment_method === 'pix' ? 'Pix' :
                                                             transaction.payment_method === 'money' ? 'Dinheiro' :
                                                                 transaction.payment_method === 'credit_card' ? 'Cartão' :
-                                                                    transaction.payment_method || 'Pix'}
+                                                                    transaction.payment_method === 'debit_card' ? 'Débito' :
+                                                                        transaction.payment_method || 'Pix'}
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">

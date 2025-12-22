@@ -14,6 +14,7 @@ export interface UpcomingAppointment {
     remaining_amount?: number;
     payment_status?: string;
     status: 'confirmed' | 'pending' | 'cancelled';
+    discount?: number;
 }
 
 interface DashboardCache {

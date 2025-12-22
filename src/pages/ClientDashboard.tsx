@@ -35,6 +35,7 @@ interface AppointmentType {
     remaining_amount?: number;
     total_amount?: number;
     discount?: number;
+    service_guidelines?: string;
 }
 
 const formatCurrency = (value: number) => {
@@ -397,6 +398,7 @@ export default function ClientDashboard() {
         }
     };
 
+
     const [isPaymentLoading, setIsPaymentLoading] = useState(false);
 
     const handlePayment = async (apt: AppointmentType) => {
@@ -412,14 +414,16 @@ export default function ClientDashboard() {
                 body: {
                     appointmentId: apt.id,
                     origin: window.location.origin,
-                    amount: (apt.remaining_amount && apt.remaining_amount > 0) ? apt.remaining_amount : undefined // Send specific amount if partial
+                    amount: (apt.remaining_amount && apt.remaining_amount > 0)
+                        ? apt.remaining_amount
+                        : (apt.total_amount && apt.total_amount > 0 ? apt.total_amount : undefined)
                 }
             });
 
             if (error) throw error;
 
             if (data?.url) {
-                // Redirect to payment page
+                // Redirect to payment page (same tab so InfinitePay can redirect back)
                 window.location.href = data.url;
             } else {
                 addToast('Erro ao gerar link de pagamento. Tente novamente mais tarde.', 'error');
@@ -1252,6 +1256,24 @@ export default function ClientDashboard() {
                                         </span>
                                     </p>
                                 </div>
+
+                                {/* Guidelines / Consent */}
+                                {selectedAppointment.service_guidelines && (
+                                    <div className="pt-4 border-t border-slate-100 dark:border-neutral-800">
+                                        <button
+                                            onClick={() => {
+                                                const el = document.getElementById('guidelines-content');
+                                                if (el) el.classList.toggle('hidden');
+                                            }}
+                                            className="text-sm text-blue-600 hover:underline font-medium flex items-center gap-1"
+                                        >
+                                            Ver termo de consentimento
+                                        </button>
+                                        <div id="guidelines-content" className="hidden mt-3 p-3 bg-slate-50 dark:bg-neutral-800 rounded-lg text-sm text-slate-600 dark:text-gray-300 prose prose-sm max-w-none dark:prose-invert"
+                                            dangerouslySetInnerHTML={{ __html: selectedAppointment.service_guidelines }}
+                                        />
+                                    </div>
+                                )}
                             </div>
 
                             {selectedAppointment.status !== 'cancelled' && selectedAppointment.status !== 'completed' && (

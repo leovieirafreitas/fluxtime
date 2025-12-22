@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { whatsappService } from '../services/whatsapp';
 import { MapPin, Clock, X, Star, Instagram, Facebook, Globe, MessageCircle, BookOpen, Tag, LogOut, User, Lock, ChevronDown, Check } from 'lucide-react';
 import OTPInput from '../components/OTPInput';
-import { getClientSession, clearClientSession } from '../lib/clientSession';
+import { getClientSession, clearClientSession, saveClientSession } from '../lib/clientSession';
 import { useToast } from '../contexts/ToastContext';
 
 interface Company {
@@ -33,6 +33,9 @@ interface Service {
     slot_interval_minutes?: number | null;
     reservation_fee?: number | null;
     is_reservation_fee_enabled?: boolean;
+    require_consent?: boolean;
+    guidelines?: string;
+    is_guidelines_enabled?: boolean;
 }
 
 
@@ -92,6 +95,7 @@ export default function PublicCompanyPage() {
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
     const [busySlots, setBusySlots] = useState<{ start: number, end: number }[]>([]);
+    const [consentAccepted, setConsentAccepted] = useState(false);
     const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => {
         const d = new Date();
         const day = d.getDay();
@@ -139,6 +143,7 @@ export default function PublicCompanyPage() {
     const [clientId, setClientId] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [timeLeft, setTimeLeft] = useState(0);
+    const [isClientFound, setIsClientFound] = useState(false);
 
     // Reviews State
     const [reviews, setReviews] = useState<any[]>([]);
@@ -714,8 +719,10 @@ export default function PublicCompanyPage() {
                 setClientName(local.name);
                 setClientEmail(local.email);
                 setClientId(local.id);
-                setIsClientLoggedIn(true);
+                // Don't auto-login existing users found by phone search. Require OTP.
+                setIsClientLoggedIn(false);
                 setIsNewClient(false);
+                setIsClientFound(true);
                 setShowRegistrationFields(false);
             } else {
                 // 2. Check Global
@@ -732,11 +739,13 @@ export default function PublicCompanyPage() {
                     setClientName(global.name);
                     setClientEmail(global.email);
                     setIsNewClient(true);
+                    setIsClientFound(true);
                     setShowRegistrationFields(false); // Hidden because we have the data
                 } else {
                     // 3. Truly New User -> Show Fields
                     setIsNewClient(true);
                     setGlobalClientInfo(null);
+                    setIsClientFound(false);
                     setShowRegistrationFields(true);
                 }
             }
@@ -813,6 +822,8 @@ export default function PublicCompanyPage() {
         setIsSubmitting(true);
         try {
             let finalId = clientId;
+            let nameToSave = clientName;
+            let emailToSave = clientEmail;
 
             if (isNewClient) {
                 // Create new client via RPC
@@ -822,19 +833,27 @@ export default function PublicCompanyPage() {
                 if (!company) throw new Error("Empresa não encontrada");
 
                 // If we found them globally, use those details. Otherwise use form inputs.
-                const nameToUse = globalClientInfo?.name || clientName;
-                const emailToUse = globalClientInfo?.email || clientEmail;
+                nameToSave = globalClientInfo?.name || clientName;
+                emailToSave = globalClientInfo?.email || clientEmail;
 
                 const { data: newClientId, error } = await supabase.rpc('public_create_client', {
                     p_company_id: company.id,
-                    p_name: nameToUse,
+                    p_name: nameToSave,
                     p_phone: normalizedPhone,
-                    p_email: emailToUse
+                    p_email: emailToSave
                 });
 
                 if (error) throw error;
                 finalId = newClientId;
             }
+
+            // Save Session and Login
+            saveClientSession({
+                name: nameToSave,
+                phone: clientPhone,
+                email: emailToSave
+            });
+            setIsClientLoggedIn(true);
 
             if (!finalId) throw new Error("ID do cliente não encontrado.");
 
@@ -1808,6 +1827,34 @@ export default function PublicCompanyPage() {
                                             </p>
                                         </div>
 
+                                        {selectedService?.is_guidelines_enabled && (
+                                            <div className="mb-6 bg-slate-50 border border-slate-200 rounded-xl p-4">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <BookOpen className="w-5 h-5 text-blue-600" />
+                                                    <h3 className="font-bold text-slate-800">Orientações e Consentimento</h3>
+                                                </div>
+                                                <div
+                                                    className="text-sm text-slate-600 mb-4 prose prose-sm max-w-none"
+                                                    dangerouslySetInnerHTML={{ __html: selectedService.guidelines || '' }}
+                                                />
+
+                                                {selectedService.require_consent && (
+                                                    <div className="flex items-start gap-3 p-3 bg-white border border-slate-200 rounded-lg">
+                                                        <input
+                                                            type="checkbox"
+                                                            id="consentCheck"
+                                                            checked={consentAccepted}
+                                                            onChange={(e) => setConsentAccepted(e.target.checked)}
+                                                            className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                        />
+                                                        <label htmlFor="consentCheck" className="text-sm text-slate-700 cursor-pointer">
+                                                            Li e concordo com as orientações acima para realizar este agendamento.
+                                                        </label>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
                                         {!isClientLoggedIn ? (
                                             <div className="space-y-4">
                                                 <div className="mb-4">
@@ -1838,7 +1885,7 @@ export default function PublicCompanyPage() {
                                                                     setClientName('');
                                                                     setClientEmail('');
                                                                     setGlobalClientInfo(null);
-                                                                    setIsNewClient(false);
+                                                                    setIsClientFound(false);
                                                                     setShowRegistrationFields(false);
                                                                 }}
                                                                 onBlur={handlePhoneBlur}
@@ -1847,6 +1894,12 @@ export default function PublicCompanyPage() {
                                                             />
                                                         </div>
                                                     </div>
+                                                    {isClientFound && !showRegistrationFields && !isClientLoggedIn && (
+                                                        <div className="text-sm text-green-600 bg-green-50 p-2 rounded-lg flex items-center gap-2 mt-2">
+                                                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                                            Encontramos seu cadastro! Clique em "Receber código" para confirmar.
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 {/* Registration Fields - Only show if we need them */}
@@ -2003,7 +2056,7 @@ export default function PublicCompanyPage() {
                                                     setIsSubmitting(false);
                                                 }
                                             } : handleSendCode}
-                                            disabled={loading || isCheckingUser || isSubmitting}
+                                            disabled={loading || isCheckingUser || isSubmitting || (selectedService?.require_consent && !consentAccepted)}
                                             className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                                         >
                                             {loading || isCheckingUser || isSubmitting ? (

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, DollarSign, CreditCard, Send, User, CheckCircle2, MapPin, Sparkles, Link as LinkIcon, BadgePercent } from 'lucide-react';
+import { X, DollarSign, CreditCard, Send, User, CheckCircle2, MapPin, Sparkles, BadgePercent } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { whatsappService } from '../services/whatsapp';
 
 // Ícone do Pix (SVG Oficial)
 const PixIcon = ({ className }: { className?: string }) => (
@@ -25,7 +26,7 @@ export function TransactionDetails({ transaction, companyId, onClose, onUpdate, 
     const [updatingMethod, setUpdatingMethod] = useState<string | null>(null);
 
     const isPaid = transaction.status === 'paid';
-    const isPending = transaction.status === 'pending';
+
 
     // Calcula valores iniciais
     const servicePrice = transaction.service_price || ((transaction.amount || 0) + (transaction.total_paid || 0) + (transaction.discount || 0));
@@ -143,6 +144,33 @@ export function TransactionDetails({ transaction, companyId, onClose, onUpdate, 
         }
     };
 
+    const handleCobrancaWhatsApp = async () => {
+        if (!transaction.client_phone) {
+            alert('Cliente sem telefone cadastrado.');
+            return;
+        }
+
+        setIsGeneratingLink(true);
+        try {
+            // Criar link para login do cliente com redirecionamento para pagamento
+            const baseUrl = window.location.origin;
+            const loginLink = `${baseUrl}/client/login?phone=${encodeURIComponent(transaction.client_phone)}&redirect=payment&appointmentId=${transaction.appointment_id}`;
+
+            // Mensagem concisa
+            let message = `Olá *${transaction.client_name}*, aqui é da barbearia.\\n\\nConsta em nosso sistema um valor pendente de *R$ ${currentPendingAmount.toFixed(2).replace('.', ',')}* referente ao serviço *${transaction.service_name}*.\\n\\nClique no link abaixo para fazer login e realizar o pagamento.`;
+
+            // Envia usando o serviço
+            await whatsappService.sendPaymentButton(transaction.client_phone, message, loginLink);
+
+            alert('Link de pagamento enviado com sucesso para o WhatsApp do cliente!');
+        } catch (error) {
+            console.error('Erro ao enviar cobrança:', error);
+            alert('Erro ao enviar mensagem via WhatsApp API. Verifique a conexão.');
+        } finally {
+            setIsGeneratingLink(false);
+        }
+    };
+
     const getPaymentLink = async (): Promise<string | null> => {
         try {
             const { data: tag, error: tagError } = await supabase.rpc('get_company_infinitepay_tag', {
@@ -175,44 +203,8 @@ export function TransactionDetails({ transaction, companyId, onClose, onUpdate, 
         }
     };
 
-    const handleCobrancaWhatsApp = async () => {
-        setIsGeneratingLink(true);
-        try {
-            const link = await getPaymentLink();
-            let message = `Olá ${transaction.client_name}, aqui é da barbearia. Segue link para pagamento do restante de R$ ${currentPendingAmount.toFixed(2).replace('.', ',')} referente ao serviço ${transaction.service_name}.`;
-            if (link) message += `\n\nLink: ${link}`;
-            else message += `\n\nChave Pix na recepção.`;
 
-            const encodedMessage = encodeURIComponent(message);
-            if (transaction.client_phone) {
-                window.open(`https://wa.me/${transaction.client_phone.replace(/\D/g, '')}?text=${encodedMessage}`, '_blank');
-            } else {
-                if (link) {
-                    await navigator.clipboard.writeText(link);
-                    alert('Cliente sem telefone. Link copiado!');
-                } else {
-                    alert('Erro ao gerar link.');
-                }
-            }
-        } finally {
-            setIsGeneratingLink(false);
-        }
-    };
 
-    const handleCopyLink = async () => {
-        setIsGeneratingLink(true);
-        try {
-            const link = await getPaymentLink();
-            if (link) {
-                await navigator.clipboard.writeText(link);
-                alert('Link copiado!');
-            } else {
-                alert('Erro na Tag InfinitePay.');
-            }
-        } finally {
-            setIsGeneratingLink(false);
-        }
-    }
 
     const bgColor = theme === 'dark' ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-slate-200';
     const textColor = theme === 'dark' ? 'text-white' : 'text-slate-900';
@@ -452,13 +444,20 @@ export function TransactionDetails({ transaction, companyId, onClose, onUpdate, 
                                 <div className="flex items-center gap-2 mb-3">
                                     <CreditCard className="w-4 h-4 text-indigo-500" />
                                     <h4 className={`text-sm font-semibold ${textColor}`}>Cobrar Online</h4>
+                                    <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-700 text-xs font-medium">
+                                        Essencial
+                                    </span>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <button onClick={handleCobrancaWhatsApp} disabled={isGeneratingLink} className="py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50">
-                                        <Send className="w-4 h-4" /> WhatsApp
-                                    </button>
-                                    <button onClick={handleCopyLink} disabled={isGeneratingLink} className={`py-2 border rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 ${theme === 'dark' ? 'border-neutral-700 hover:bg-neutral-700' : 'border-slate-200 hover:bg-slate-100'}`}>
-                                        <LinkIcon className="w-4 h-4" /> Copiar Link
+                                    <button
+                                        onClick={handleCobrancaWhatsApp}
+                                        disabled={isGeneratingLink}
+                                        className="col-span-2 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 shadow-md shadow-green-200/50"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <Send className="w-4 h-4" />
+                                            <span>Enviar Link via WhatsApp</span>
+                                        </div>
                                     </button>
                                 </div>
                             </div>

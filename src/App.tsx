@@ -64,6 +64,7 @@ function App() {
           <Routes>
             {/* Client Portal Routes */}
             <Route path="/client" element={<ClientLogin />} />
+            <Route path="/client/login" element={<ClientLogin />} />
             <Route path="/client/dashboard" element={<ClientDashboard />} />
 
             {/* Rota Pública - Página da Empresa por ID */}

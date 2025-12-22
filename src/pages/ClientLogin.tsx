@@ -31,6 +31,27 @@ export default function ClientLogin() {
         }
     }, [timeLeft]);
 
+    // Pré-preencher telefone se vier da URL
+    useEffect(() => {
+        const phoneParam = searchParams.get('phone');
+        if (phoneParam) {
+            // Formatar telefone
+            let value = phoneParam.replace(/\D/g, '');
+            if (value.startsWith('55')) value = value.slice(2); // Remove +55
+            if (value.length > 11) value = value.slice(0, 11);
+
+            // Format: (XX) XXXXX-XXXX
+            if (value.length > 2) {
+                value = `(${value.slice(0, 2)}) ${value.slice(2)}`;
+            }
+            if (value.length > 10) {
+                value = `${value.slice(0, 10)}-${value.slice(10)}`;
+            }
+
+            setPhone(value);
+        }
+    }, [searchParams]);
+
     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         let value = e.target.value.replace(/\D/g, '');
         if (value.length > 11) value = value.slice(0, 11);

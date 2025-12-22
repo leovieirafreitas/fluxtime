@@ -3,7 +3,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import CustomSelect from './CustomSelect';
 import CustomDatePicker from './CustomDatePicker';
 import CustomTimePicker from './CustomTimePicker';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface NewAppointmentSlideOverProps {
     isOpen: boolean;
@@ -30,6 +30,9 @@ interface NewAppointmentSlideOverProps {
     schedulingRules: any;
     businessHours: any[];
     appointments: any[];
+    initialNotes?: string;
+    initialAppointmentName?: string;
+    isEditing?: boolean;
 }
 
 export default function NewAppointmentSlideOver({
@@ -56,12 +59,23 @@ export default function NewAppointmentSlideOver({
     onSubmit,
     schedulingRules,
     businessHours,
-    appointments
+    appointments,
+    initialNotes = '',
+    initialAppointmentName = '',
+    isEditing = false
 }: NewAppointmentSlideOverProps) {
     const { theme } = useTheme();
-    const [appointmentName, setAppointmentName] = useState('');
-    const [notes, setNotes] = useState('');
+    const [appointmentName, setAppointmentName] = useState(initialAppointmentName);
+    const [notes, setNotes] = useState(initialNotes);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Sync state when props change (especially when opening for edit)
+    useEffect(() => {
+        if (isOpen) {
+            setNotes(initialNotes);
+            setAppointmentName(initialAppointmentName);
+        }
+    }, [isOpen, initialNotes, initialAppointmentName]);
 
     // --- LOGIC FOR CONSTRAINTS ---
 
@@ -221,7 +235,7 @@ export default function NewAppointmentSlideOver({
                 {/* Header */}
                 <div className={`flex items-center justify-between p-6 border-b ${theme === 'dark' ? 'border-zinc-800' : 'border-slate-100'
                     }`}>
-                    <h2 className="text-xl font-bold">Novo agendamento</h2>
+                    <h2 className="text-xl font-bold">{isEditing ? 'Editar agendamento' : 'Novo agendamento'}</h2>
                     <button
                         onClick={onClose}
                         className={`p-2 rounded-lg transition-colors ${theme === 'dark'
@@ -471,7 +485,7 @@ export default function NewAppointmentSlideOver({
                         onClick={handleSubmit}
                         disabled={isSubmitting}
                         className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed">
-                        {isSubmitting ? 'Criando...' : 'Criar agendamento'}
+                        {isSubmitting ? (isEditing ? 'Salvando...' : 'Criando...') : (isEditing ? 'Salvar alterações' : 'Criar agendamento')}
                     </button>
                 </div>
 

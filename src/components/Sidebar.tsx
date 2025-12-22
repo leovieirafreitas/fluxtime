@@ -1,4 +1,4 @@
-import { Menu, Bell, Search, User, Moon, Sun, LogOut, X, Building2, ChevronDown, DollarSign } from 'lucide-react';
+import { Menu, Bell, Calendar, User, Moon, Sun, LogOut, X, Building2, ChevronDown, DollarSign } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -27,7 +27,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     const menuItems = [
         { icon: <Menu className="w-5 h-5" />, label: 'Início', path: '/dashboard' },
         { icon: <Bell className="w-5 h-5" />, label: 'Notificações', badge: 5, path: '/notifications' },
-        { icon: <Search className="w-5 h-5" />, label: 'Agendamentos', path: '/appointments' },
+        { icon: <Calendar className="w-5 h-5" />, label: 'Agendamentos', path: '/appointments' },
         { icon: <User className="w-5 h-5" />, label: 'Clientes', path: '/clients' },
         { icon: <DollarSign className="w-5 h-5" />, label: 'Financeiro', path: '/financial/transactions' },
     ];

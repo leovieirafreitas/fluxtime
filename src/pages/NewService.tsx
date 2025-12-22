@@ -21,6 +21,8 @@ interface Category {
 
 
 import { useToast } from '../contexts/ToastContext';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
 
 export default function NewService() {
     const { addToast } = useToast();
@@ -56,6 +58,7 @@ export default function NewService() {
     const [visibility, setVisibility] = useState('public');
     const [guidelines, setGuidelines] = useState('');
     const [isGuidelinesEnabled, setIsGuidelinesEnabled] = useState(false);
+    const [requireConsent, setRequireConsent] = useState(false);
 
     // Scheduling Rules
     const [slotInterval, setSlotInterval] = useState<string>('');
@@ -170,6 +173,8 @@ export default function NewService() {
 
                 setGuidelines(service.guidelines || '');
                 setIsGuidelinesEnabled(service.is_guidelines_enabled || false);
+                // @ts-ignore
+                setRequireConsent(service.require_consent || false);
 
                 // Rules
                 if (service.slot_interval_minutes) {
@@ -245,6 +250,8 @@ export default function NewService() {
                 visibility,
                 guidelines: isGuidelinesEnabled ? guidelines : null,
                 is_guidelines_enabled: isGuidelinesEnabled,
+                // @ts-ignore
+                require_consent: isGuidelinesEnabled ? requireConsent : false,
 
                 // Rules - Only save if enabled
                 slot_interval_minutes: isSlotIntervalEnabled ? parseInt(slotInterval) : null,
@@ -602,13 +609,33 @@ export default function NewService() {
                                 </label>
                             </div>
                             {isGuidelinesEnabled && (
-                                <textarea
-                                    value={guidelines}
-                                    onChange={(e) => setGuidelines(e.target.value)}
-                                    placeholder="Digite as orientações..."
-                                    rows={3}
-                                    className={`w-full px-4 py-2.5 rounded-lg border outline-none ${theme === 'dark' ? 'bg-black border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`}
-                                />
+                                <div className="space-y-4">
+                                    <ReactQuill
+                                        theme="snow"
+                                        value={guidelines}
+                                        onChange={setGuidelines}
+                                        modules={{
+                                            toolbar: [
+                                                ['bold', 'italic', 'underline', 'strike'],
+                                                [{ 'header': [1, 2, 3, false] }],
+                                                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                                            ]
+                                        }}
+                                        className="bg-white text-slate-900 rounded-lg"
+                                    />
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="checkbox"
+                                            id="requireConsent"
+                                            checked={requireConsent}
+                                            onChange={(e) => setRequireConsent(e.target.checked)}
+                                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <label htmlFor="requireConsent" className={`text-sm ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>
+                                            Pedir consentimento sobre instruções
+                                        </label>
+                                    </div>
+                                </div>
                             )}
                         </div>
                     </div>

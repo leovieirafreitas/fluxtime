@@ -129,7 +129,8 @@ export default function Insights() {
 
                         // 1. Calcular valores base
                         const servicePrice = apt.service?.price || 0;
-                        const totalAmount = (apt.total_amount !== null && apt.total_amount !== undefined) ? apt.total_amount : servicePrice;
+                        const discount = apt.discount || 0;
+                        const totalAmount = (apt.total_amount !== null && apt.total_amount !== undefined) ? apt.total_amount : Math.max(0, servicePrice - discount);
                         const remaining = apt.remaining_amount;
 
                         // 2. Calcular paidAmount
@@ -156,7 +157,6 @@ export default function Insights() {
                         }
 
                         // 4. Calcular displayAmount
-                        const discount = apt.discount || 0;
                         const effectivePrice = Math.max(0, servicePrice - discount);
                         let displayAmount = 0;
 

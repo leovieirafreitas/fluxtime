@@ -53,6 +53,11 @@ export default function Appointments() {
     const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent');
     const [discountValue, setDiscountValue] = useState(0);
 
+    // Edit State
+    const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);
+    const [initialNotes, setInitialNotes] = useState('');
+    const [initialAppointmentName, setInitialAppointmentName] = useState('');
+
     const hours = Array.from({ length: 24 }, (_, i) => i);
 
     const [searchParams] = useSearchParams();
@@ -309,13 +314,14 @@ export default function Appointments() {
         if (!showBusinessHours) return true;
 
         const dayOfWeek = date.getDay();
-        const dayConfig = businessHours.filter(h => h.day_of_week === dayOfWeek && h.is_open);
+        const dayConfig = businessHours.filter(h => Number(h.day_of_week) === dayOfWeek && h.is_open);
 
         if (!dayConfig.length) return false;
 
         return dayConfig.some(slot => {
-            const startH = parseInt(slot.start_time.split(':')[0]);
-            const endH = parseInt(slot.end_time.split(':')[0]);
+            if (!slot.start_time || !slot.end_time) return false;
+            const startH = parseInt(String(slot.start_time).split(':')[0], 10);
+            const endH = parseInt(String(slot.end_time).split(':')[0], 10);
             return hour >= startH && hour < endH;
         });
     };
@@ -817,7 +823,7 @@ export default function Appointments() {
                                                         );
                                                     })}
 
-                                                    {isAllowed && (
+                                                    {isAllowed && isOpen && (
                                                         <button
                                                             onClick={() => {
                                                                 const yyyy = day.fullDate.getFullYear();
@@ -913,20 +919,63 @@ export default function Appointments() {
                     onUpdate={fetchAppointments}
                     companyName={profile?.companies?.name || 'Barbershop'}
                     onEdit={(apt) => {
-                        // TODO: Implement Edit
                         console.log("Edit requested for:", apt);
+
+                        setEditingAppointmentId(apt.id);
+                        setSelectedClient(apt.client_id || '');
+
+                        // Find service
+                        if (apt.service_id) {
+                            const svc = services.find(s => s.id === apt.service_id);
+                            if (svc) setSelectedService(svc);
+                        }
+
+                        // Parse date/time
+                        if (apt.start_date) {
+                            const d = new Date(apt.start_date);
+                            const yyyy = d.getFullYear();
+                            const mm = String(d.getMonth() + 1).padStart(2, '0');
+                            const dd = String(d.getDate()).padStart(2, '0');
+                            setAppointmentDate(`${yyyy}-${mm}-${dd}`);
+
+                            const hh = String(d.getHours()).padStart(2, '0');
+                            const min = String(d.getMinutes()).padStart(2, '0');
+                            setAppointmentTime(`${hh}:${min}`);
+                        }
+
+                        // Discount
+                        setDiscountValue(apt.discount || 0);
+                        setDiscountType('fixed');
+
+                        // Notes and Name
+                        setInitialNotes(apt.notes || '');
+                        // If there is a name column, use it. apt keys are dynamic from fetch.
+                        // @ts-ignore
+                        setInitialAppointmentName(apt.appointment_name || '');
+
                         setIsDetailsOpen(false);
-                        // Trigger open new appointment with prefilled?
-                        // This is complex as NewAppointmentSlideOver expects specific props
-                        // For now we just close or show alert
-                        addToast('Edição de agendamento em breve.', 'info');
+                        setIsNewAppointmentOpen(true);
                     }}
                 />
 
                 {/* Slide-over - Novo Agendamento */}
                 <NewAppointmentSlideOver
                     isOpen={isNewAppointmentOpen}
-                    onClose={() => setIsNewAppointmentOpen(false)}
+                    onClose={() => {
+                        setIsNewAppointmentOpen(false);
+                        // Clear edit state on close
+                        setEditingAppointmentId(null);
+                        setInitialNotes('');
+                        setInitialAppointmentName('');
+
+                        // Optional: Clear form too if desired, or keep as draft? 
+                        // Usually clean slate is better after close.
+                        setSelectedClient('');
+                        setSelectedService(null);
+                        setAppointmentTime('');
+                        setAppointmentDate('');
+                        setDiscountValue(0);
+                    }}
                     clients={clients}
                     services={services}
                     selectedService={selectedService}
@@ -945,6 +994,9 @@ export default function Appointments() {
                     discount={discount}
                     total={total}
                     userFullName={profile?.full_name || 'Usuário'}
+                    isEditing={!!editingAppointmentId}
+                    initialNotes={initialNotes}
+                    initialAppointmentName={initialAppointmentName}
                     onSubmit={async ({ notes }) => {
                         if (!selectedClient || !selectedService || !appointmentDate || !appointmentTime || !profile?.company_id) {
                             addToast('Por favor, preencha todos os campos obrigatórios.', 'error');
@@ -962,48 +1014,78 @@ export default function Appointments() {
                         const clientPhone = clientObj?.phone || null;
                         const clientEmail = clientObj?.email || null;
 
-                        // Determine initial status based on rules
-                        const initialStatus = schedulingRules?.confirmation_required === true ? 'pending' : 'confirmed';
+                        if (editingAppointmentId) {
+                            // UPDATE
+                            const { error } = await supabase
+                                .from('appointments')
+                                .update({
+                                    client_id: selectedClient,
+                                    client_name: clientName,
+                                    client_phone: clientPhone,
+                                    client_email: clientEmail,
+                                    service_id: selectedService.id,
+                                    start_time: startDateTime.toISOString(),
+                                    end_time: endDateTime.toISOString(),
+                                    notes: notes,
+                                    // custom name if column exists? We passed name in cb.
+                                    // appointment_name: name,
+                                    remaining_amount: total, // Assuming we update the payable amount
+                                    discount: discount,
+                                    total_amount: 0 // Reset paid amount if editing price? Or keep?
+                                    // Logic: If editing, usually we are resetting the 'deal'. 
+                                    // If already paid, this is complex. But for now let's assume standard re-book.
+                                })
+                                .eq('id', editingAppointmentId);
 
-                        const { error } = await supabase
-                            .from('appointments')
-                            .insert({
-                                company_id: profile.company_id,
-                                client_id: selectedClient,
-                                client_name: clientName,
-                                client_phone: clientPhone,
-                                client_email: clientEmail,
-                                service_id: selectedService.id,
-                                professional_id: profile.id, // Current user as professional for now
-                                start_time: startDateTime.toISOString(),
-                                end_time: endDateTime.toISOString(),
-                                status: initialStatus,
-                                payment_status: 'unpaid',
-                                origin: 'business',
-                                notes: notes,
-                                total_amount: 0, // Nada foi pago na criação pelo admin
-                                remaining_amount: total, // Valor a pagar (Preço - Desconto)
-                                discount: discount, // Valor do desconto
-                                // discount_type: discountType // Se a coluna existir, ok. Senão, pode dar erro. Vou comentar por segurança se der erro, mas...
-                                // Melhor remover discount_type e discount_amount se não tiver certeza do schema, user script ADD_DISCOUNT só criou 'discount'.
-                                // Vou assumir que 'discount' é o que criamos.
-                                // appointment_name: name // If column exists, otherwise ignore
-                            });
-
-                        if (error) {
-                            console.error('Error creating appointment:', error);
-                            addToast(`Erro ao criar agendamento: ${error.message || JSON.stringify(error)}`, 'error');
+                            if (error) {
+                                console.error('Error updating appointment:', error);
+                                addToast(`Erro ao atualizar: ${error.message}`, 'error');
+                            } else {
+                                addToast('Agendamento atualizado com sucesso!', 'success');
+                                setIsNewAppointmentOpen(false);
+                                setEditingAppointmentId(null);
+                                fetchAppointments();
+                            }
                         } else {
-                            // Success
-                            setIsNewAppointmentOpen(false);
-                            fetchAppointments(); // Refresh list
+                            // INSERT (Create)
+                            // Determine initial status based on rules
+                            const initialStatus = schedulingRules?.confirmation_required === true ? 'pending' : 'confirmed';
 
-                            // Reset form (optional, simplified)
-                            setSelectedClient('');
-                            setSelectedService(null);
-                            setAppointmentTime('');
+                            const { error } = await supabase
+                                .from('appointments')
+                                .insert({
+                                    company_id: profile.company_id,
+                                    client_id: selectedClient,
+                                    client_name: clientName,
+                                    client_phone: clientPhone,
+                                    client_email: clientEmail,
+                                    service_id: selectedService.id,
+                                    professional_id: profile.id,
+                                    start_time: startDateTime.toISOString(),
+                                    end_time: endDateTime.toISOString(),
+                                    status: initialStatus,
+                                    payment_status: 'unpaid',
+                                    origin: 'business',
+                                    notes: notes,
+                                    total_amount: 0,
+                                    remaining_amount: total,
+                                    discount: discount
+                                });
+
+                            if (error) {
+                                console.error('Error creating appointment:', error);
+                                addToast(`Erro ao criar agendamento: ${error.message}`, 'error');
+                            } else {
+                                setIsNewAppointmentOpen(false);
+                                fetchAppointments();
+                                setSelectedClient('');
+                                setSelectedService(null);
+                                setAppointmentTime('');
+                            }
                         }
                     }}
+
+
                     schedulingRules={schedulingRules}
                     businessHours={businessHours}
                     appointments={appointments}

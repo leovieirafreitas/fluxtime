@@ -28,10 +28,7 @@ export const whatsappService = {
             return null;
         }
 
-        // Clean phone number: remove non-digits
         let cleanPhone = phone.replace(/\D/g, '');
-
-        // Ensure Brazil DDI (55) if missing
         if (!cleanPhone.startsWith('55') && cleanPhone.length >= 10) {
             cleanPhone = '55' + cleanPhone;
         }
@@ -44,7 +41,7 @@ export const whatsappService = {
                 options: {
                     delay: 1200,
                     presence: "composing",
-                    linkPreview: false
+                    linkPreview: true // Enabled link preview
                 }
             };
 
@@ -58,16 +55,34 @@ export const whatsappService = {
             });
 
             if (!response.ok) {
-                const errorData = await response.text();
-                console.error('WhatsApp API Error:', response.status, errorData);
+                // const errorData = await response.text();
+                // console.error('WhatsApp API Error:', response.status, errorData);
                 throw new Error(`Failed to send message: ${response.statusText}`);
             }
 
-            const data = await response.json();
-            return data;
+            return await response.json();
         } catch (error) {
             console.error('Error sending WhatsApp message:', error);
             throw error;
         }
+    },
+
+    /**
+     * Sends a Payment Link Button (Call to Action)
+     * NOTE: Falling back to rich text with link preview because "URL Buttons" 
+     * are often blocked or cause "Unable to load message" errors on WhatsApp Web/Desktop 
+     * in the current API version.
+     */
+    async sendPaymentButton(phone: string, text: string, paymentUrl: string): Promise<SendMessageResponse | null> {
+        if (!API_URL || !API_KEY) return null;
+
+        // Construct a highly visible message with the link
+        // We modify the text slightly to ensure it points to the link if it referred to a button
+        const adjustedText = text.replace(/clique no botão abaixo/gi, 'clique no link abaixo');
+
+        const fullMessage = `${adjustedText}\n\n🔗 ${paymentUrl}`;
+
+        // Use the robust sendText method with linkPreview enabled
+        return this.sendText(phone, fullMessage);
     }
 };

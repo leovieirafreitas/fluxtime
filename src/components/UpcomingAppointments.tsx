@@ -137,13 +137,22 @@ export default function UpcomingAppointments() {
                                             <span>{formatTime(appointment.start_time)}</span>
                                         </div>
                                         <div className="ml-auto flex flex-col items-end">
-                                            <div className="font-medium text-slate-900">
-                                                {/* Mostra o valor pendente. Se for 0 (já pago), mostra "Pago" */}
-                                                {appointment.payment_status === 'paid'
-                                                    ? <span className="text-emerald-500 font-bold">Pago</span>
-                                                    : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pendingValue)
-                                                }
-                                            </div>
+                                            {appointment.payment_status === 'paid' ? (
+                                                <span className="text-emerald-500 font-bold">
+                                                    Pago {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                                                        (appointment.total_amount && appointment.total_amount > 0)
+                                                            ? appointment.total_amount
+                                                            : Math.max(0, (appointment.service?.price || 0) - (appointment.discount || 0))
+                                                    )}
+                                                </span>
+                                            ) : (
+                                                <div className="flex flex-col items-end">
+                                                    <span>
+                                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pendingValue)}
+                                                    </span>
+                                                    <span className="text-[11px] text-slate-500 font-medium">Valor pendente</span>
+                                                </div>
+                                            )}
                                             {/* Mostra taxa paga se houver pendência restante */}
                                             {appointment.payment_status !== 'paid' && (appointment.total_amount || 0) > 0 && pendingValue > 0 && (
                                                 <div className="text-[10px] text-emerald-600 font-medium bg-emerald-50 px-1.5 py-0.5 rounded-full mt-0.5 border border-emerald-100 flex items-center gap-1">

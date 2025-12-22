@@ -115,22 +115,75 @@ serve(async (req) => {
             amount_in_cents: amountInCents
         })
 
-        // Items for invoice
-        const items = [
-            {
-                quantity: 1,
-                amount: amountInCents,
-                name: itemName
+        // Get webhook URL
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+        const webhookUrl = `${supabaseUrl}/functions/v1/infinitepay-webhook`;
+
+        console.log('Webhook URL:', webhookUrl)
+
+        // Try to use InfinitePay API to create checkout link with webhook
+        // According to docs: POST https://api.infinitepay.io/invoices/public/checkout/links
+        const infinitepayApiUrl = 'https://api.infinitepay.io/invoices/public/checkout/links';
+
+        const payload = {
+            handle: handle,
+            webhook_url: webhookUrl,
+            order_nsu: orderId,
+            items: [
+                {
+                    quantity: 1,
+                    price: amountInCents,
+                    description: itemName
+                }
+            ]
+        };
+
+        console.log('Calling InfinitePay API with payload:', JSON.stringify(payload, null, 2))
+
+        try {
+            const apiResponse = await fetch(infinitepayApiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (apiResponse.ok) {
+                const apiData = await apiResponse.json();
+                console.log('InfinitePay API Response:', apiData)
+
+                // The API should return a checkout URL
+                if (apiData.url || apiData.checkout_url || apiData.link) {
+                    const checkoutUrl = apiData.url || apiData.checkout_url || apiData.link;
+                    console.log('Using API-generated URL:', checkoutUrl)
+
+                    return new Response(
+                        JSON.stringify({ url: checkoutUrl }),
+                        {
+                            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                            status: 200,
+                        }
+                    )
+                }
+            } else {
+                const errorText = await apiResponse.text();
+                console.error('InfinitePay API Error:', apiResponse.status, errorText)
+                // Fall through to manual URL construction
             }
-        ]
+        } catch (apiError) {
+            console.error('Error calling InfinitePay API:', apiError)
+            // Fall through to manual URL construction
+        }
+
         // Fallback to manual URL construction
         // Deep linking format: https://checkout.infinitepay.io/{handle}?items=...\n        // Items must use 'price' (cents) according to deep link docs, not 'amount'.
 
-        const itemsForUrl = items.map(item => ({
-            quantity: item.quantity,
-            price: item.amount, // Map amount to price
-            name: item.name
-        }))
+        const itemsForUrl = [{
+            quantity: 1,
+            price: amountInCents,
+            name: itemName
+        }]
 
         const itemsParam = JSON.stringify(itemsForUrl)
 
@@ -147,6 +200,9 @@ serve(async (req) => {
         // Append payment_success param so the frontend knows to show a success message
         const redirectUrl = `${redirectBase}/client/dashboard?payment_success=true`;
         params.append('redirect_url', redirectUrl)
+
+        // Add webhook URL for automatic payment confirmation
+        params.append('webhook_url', webhookUrl)
 
         // Use the cleaned handle
         const cleanHandle = handle.replace(/[^a-zA-Z0-9_-]/g, '')
