@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, DollarSign, CreditCard, Send, User, CheckCircle2, MapPin, Sparkles, BadgePercent } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { whatsappService } from '../services/whatsapp';
@@ -24,6 +24,19 @@ export function TransactionDetails({ transaction, companyId, onClose, onUpdate, 
     const [isProcessing, setIsProcessing] = useState(false);
     const [isGeneratingLink, setIsGeneratingLink] = useState(false);
     const [updatingMethod, setUpdatingMethod] = useState<string | null>(null);
+    const [fetchedCompanyName, setFetchedCompanyName] = useState<string>(transaction.company_name || '');
+
+    useEffect(() => {
+        if (!fetchedCompanyName && companyId) {
+            supabase.from('companies')
+                .select('name')
+                .eq('id', companyId)
+                .single()
+                .then(({ data }) => {
+                    if (data) setFetchedCompanyName(data.name);
+                });
+        }
+    }, [companyId]);
 
     const isPaid = transaction.status === 'paid';
 
@@ -152,17 +165,25 @@ export function TransactionDetails({ transaction, companyId, onClose, onUpdate, 
 
         setIsGeneratingLink(true);
         try {
-            // Criar link para login do cliente com redirecionamento para pagamento
+            // Solução Robusta: Enviar Link de Login para garantir o fluxo correto e identificação do pagamento
+            // Como solicitado, removemos a tentativa de link direto manual que estava falhando no reconhecimento do webhook
+
+            // Format values
+            const valService = servicePrice;
+            const valDiscount = transaction.discount || 0;
+            const valTotalWithDiscount = valService - valDiscount;
+            const valPaid = transaction.total_paid || 0;
+            const valRemaining = currentPendingAmount;
+
             const baseUrl = window.location.origin;
             const loginLink = `${baseUrl}/client/login?phone=${encodeURIComponent(transaction.client_phone)}&redirect=payment&appointmentId=${transaction.appointment_id}`;
 
-            // Mensagem concisa
-            let message = `Olá *${transaction.client_name}*, aqui é da barbearia.\\n\\nConsta em nosso sistema um valor pendente de *R$ ${currentPendingAmount.toFixed(2).replace('.', ',')}* referente ao serviço *${transaction.service_name}*.\\n\\nClique no link abaixo para fazer login e realizar o pagamento.`;
+            const message = `Olá *${transaction.client_name}* 👋, tudo bem?\nAqui é da *${fetchedCompanyName || 'Barbearia'}*.\n\nSegue o detalhamento do valor pendente:\n\n✂️ *Serviço:* ${transaction.service_name}\n\n💰 *Resumo Financeiro:*\nValor Serviço: R$ ${valService.toFixed(2).replace('.', ',')}\nDesconto: R$ ${valDiscount.toFixed(2).replace('.', ',')}\n----------------\nValor Total: R$ ${valTotalWithDiscount.toFixed(2).replace('.', ',')}\nJá Pago: R$ ${valPaid.toFixed(2).replace('.', ',')}\n🔴 *Restante: R$ ${valRemaining.toFixed(2).replace('.', ',')}*\n\nPara acessar sua área e realizar o pagamento com segurança, clique no link abaixo:\n`;
 
-            // Envia usando o serviço
+            // Envia usando o serviço (que abre o WhatsApp)
             await whatsappService.sendPaymentButton(transaction.client_phone, message, loginLink);
 
-            alert('Link de pagamento enviado com sucesso para o WhatsApp do cliente!');
+            alert('Link de acesso enviado com sucesso!');
         } catch (error) {
             console.error('Erro ao enviar cobrança:', error);
             alert('Erro ao enviar mensagem via WhatsApp API. Verifique a conexão.');
