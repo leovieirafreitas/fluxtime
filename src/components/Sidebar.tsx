@@ -26,7 +26,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
     const menuItems = [
         { icon: <Menu className="w-5 h-5" />, label: 'Início', path: '/dashboard' },
-        { icon: <Bell className="w-5 h-5" />, label: 'Notificações', badge: 5, path: '/notifications' },
+        { icon: <Bell className="w-5 h-5" />, label: 'Notificações', path: '/notifications' },
         { icon: <Calendar className="w-5 h-5" />, label: 'Agendamentos', path: '/appointments' },
         { icon: <User className="w-5 h-5" />, label: 'Clientes', path: '/clients' },
         { icon: <DollarSign className="w-5 h-5" />, label: 'Financeiro', path: '/financial/transactions' },
@@ -111,11 +111,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                                     {item.icon}
                                     <span className="font-medium">{item.label}</span>
                                 </div>
-                                {item.badge && (
-                                    <span className="w-6 h-6 rounded-full bg-primary-500 text-white text-xs flex items-center justify-center font-bold">
-                                        {item.badge}
-                                    </span>
-                                )}
+
                             </button>
                         );
                     })}

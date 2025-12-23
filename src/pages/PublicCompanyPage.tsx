@@ -663,7 +663,7 @@ export default function PublicCompanyPage() {
 
             } else {
                 // No reservation fee - Regular Appointment
-                const { error } = await supabase.rpc('public_create_appointment', {
+                const { data: newAppointmentId, error } = await supabase.rpc('public_create_appointment', {
                     p_company_id: company.id,
                     p_client_id: finalClientId,
                     p_service_id: selectedService.id,
@@ -678,6 +678,14 @@ export default function PublicCompanyPage() {
                 });
 
                 if (error) throw error;
+
+                // Send Push Notification
+                if (newAppointmentId) {
+                    supabase.functions.invoke('send-push-notification', {
+                        body: { appointment_id: newAppointmentId }
+                    }).catch(err => console.error('Push error:', err));
+                }
+
                 setBookingStep(BookingStep.SUCCESS);
             }
         } catch (err: any) {

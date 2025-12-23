@@ -183,6 +183,12 @@ export default function ClientDashboard() {
                         // But we don't want to alarm the user if it was already confirmed by webhook.
                     } else if (data) {
                         // Success!
+
+                        // Send Push Notification (data is the new appointment ID)
+                        supabase.functions.invoke('send-push-notification', {
+                            body: { appointment_id: data }
+                        }).catch(err => console.error('Push error:', err));
+
                         // Set flag to show popup after reload
                         sessionStorage.setItem('show_success_popup', 'true');
 
@@ -292,6 +298,11 @@ export default function ClientDashboard() {
                     if (error) {
                         console.error('Error marking appointment paid:', error);
                         // We continue to show success to user if it fails (maybe already paid via webhook)
+                    } else {
+                        // Send Push Notification
+                        supabase.functions.invoke('send-push-notification', {
+                            body: { appointment_id: orderNsu }
+                        }).catch(err => console.error('Push error:', err));
                     }
 
                     // Store success message to show after reload
@@ -359,6 +370,14 @@ export default function ClientDashboard() {
             });
 
             if (error) throw error;
+
+            // Send Push Notification for Cancellation
+            supabase.functions.invoke('send-push-notification', {
+                body: {
+                    appointment_id: selectedAppointment.id,
+                    type: 'cancel'
+                }
+            }).catch(err => console.error('Push error:', err));
 
             // Update local state
             setAppointments(prev => prev.map(a =>
@@ -1338,17 +1357,24 @@ export default function ClientDashboard() {
                             setIsRescheduling(false);
                             setSelectedAppointment(null);
                             // Refresh state
-                            const parsed = JSON.parse(localStorage.getItem('client_session') || '{}');
-                            let cleanPhone = null;
-                            if (parsed.phone) {
-                                cleanPhone = parsed.phone.replace(/^\+55/, '').replace(/^55/, '').replace(/\D/g, '');
+                            try {
+                                const sessionData = localStorage.getItem('client_session');
+                                if (!sessionData) return;
+
+                                const parsed = JSON.parse(sessionData);
+                                let cleanPhone = null;
+                                if (parsed.phone) {
+                                    cleanPhone = parsed.phone.replace(/^\+55/, '').replace(/^55/, '').replace(/\D/g, '');
+                                }
+                                supabase.rpc('get_client_appointments', {
+                                    p_phone: cleanPhone,
+                                    p_email: parsed.email
+                                }).then(({ data }: any) => {
+                                    if (data) setAppointments(data);
+                                });
+                            } catch (e) {
+                                console.error('Error refreshing appointments:', e);
                             }
-                            supabase.rpc('get_client_appointments', {
-                                p_phone: cleanPhone,
-                                p_email: parsed.email
-                            }).then(({ data }: any) => {
-                                if (data) setAppointments(data);
-                            });
                         }}
                         clientPhone={clientPhone}
                         clientEmail={clientEmail}
@@ -1545,6 +1571,14 @@ function RescheduleModal({ appointment, onClose, onSuccess, clientPhone, clientE
             });
 
             if (error) throw error;
+
+            // Send Push Notification
+            supabase.functions.invoke('send-push-notification', {
+                body: {
+                    appointment_id: appointment.id,
+                    type: 'reschedule'
+                }
+            }).catch(err => console.error('Push error:', err));
 
             // Show success popup
             setSuccessPopup({

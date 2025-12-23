@@ -28,6 +28,8 @@ import { ToastProvider } from './contexts/ToastContext';
 
 import Coupons from './pages/Coupons';
 import Transactions from './pages/Transactions';
+import NotificationsPage from './pages/NotificationsPage';
+import PushNotificationPrompt from './components/PushNotificationPrompt';
 
 
 function App() {
@@ -61,6 +63,7 @@ function App() {
     <BrowserRouter>
       <UserProfileProvider>
         <ToastProvider>
+          {session && <PushNotificationPrompt />}
           <Routes>
             {/* Client Portal Routes */}
             <Route path="/client" element={<ClientLogin />} />
@@ -156,6 +159,10 @@ function App() {
             <Route
               path="/financial/transactions"
               element={session ? <Transactions /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/notifications"
+              element={session ? <NotificationsPage /> : <Navigate to="/login" />}
             />
           </Routes>
         </ToastProvider>
