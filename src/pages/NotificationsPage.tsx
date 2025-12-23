@@ -134,10 +134,10 @@ export default function NotificationsPage() {
                 prev.map(n => ({ ...n, is_read: true }))
             );
 
-            showToast('Todas as notificações marcadas como lidas', 'success');
+            addToast('Todas as notificações marcadas como lidas', 'success');
         } catch (error) {
             console.error('Erro ao marcar todas como lidas:', error);
-            showToast('Erro ao marcar notificações', 'error');
+            addToast('Erro ao marcar notificações', 'error');
         }
     };
 
