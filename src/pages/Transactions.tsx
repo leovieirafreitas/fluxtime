@@ -143,7 +143,7 @@ export default function Transactions() {
                 // 1. Definição correta do valor pago (Evita contar valor total como 'pago' erroneamente)
                 const servicePrice = apt.service?.price || 0;
                 const discount = (apt.discount || 0);
-                const totalAmount = (apt.total_amount !== null && apt.total_amount !== undefined) ? apt.total_amount : Math.max(0, servicePrice - discount);
+                const totalAmount = (apt.total_amount && apt.total_amount > 0) ? apt.total_amount : Math.max(0, servicePrice - discount);
                 const remaining = apt.remaining_amount;
 
                 let paidAmount = 0;

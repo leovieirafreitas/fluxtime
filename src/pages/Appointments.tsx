@@ -1067,7 +1067,7 @@ export default function Appointments() {
                                     payment_status: 'unpaid',
                                     origin: 'business',
                                     notes: notes,
-                                    total_amount: 0,
+                                    total_amount: total,
                                     remaining_amount: total,
                                     discount: discount
                                 });
