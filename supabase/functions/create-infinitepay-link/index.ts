@@ -115,6 +115,17 @@ serve(async (req) => {
             amount_in_cents: amountInCents
         })
 
+        // Pre-calculate Redirect URL
+        let redirectBase = 'https://fluxtime.com.br';
+        if (origin && (origin.startsWith('http://localhost') || origin.startsWith('https://'))) {
+            redirectBase = origin;
+        }
+
+        // Must include pending_id/order_nsu for Frontend verification!
+        const redirectUrl = `${redirectBase}/client/dashboard?payment_success=true&pending_id=${orderId}`;
+
+        console.log('Redirect URL:', redirectUrl)
+
         // Get webhook URL
         const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
         const webhookUrl = `${supabaseUrl}/functions/v1/infinitepay-webhook`;
@@ -129,6 +140,12 @@ serve(async (req) => {
             handle: handle,
             webhook_url: webhookUrl,
             order_nsu: orderId,
+            return_url: redirectUrl, // Standard field for redirect
+            redirect_url: redirectUrl, // Redundant fallback just in case
+            metadata: {
+                return_url: redirectUrl,
+                order_id: orderId
+            },
             items: [
                 {
                     quantity: 1,
@@ -190,18 +207,7 @@ serve(async (req) => {
         const params = new URLSearchParams()
         params.append('items', itemsParam)
         params.append('order_nsu', orderId)
-
-        // redirect_url validation: some environments might block localhost or require https
-        let redirectBase = 'https://fluxtime.com.br';
-        if (origin && (origin.startsWith('http://localhost') || origin.startsWith('https://'))) {
-            redirectBase = origin;
-        }
-
-        // Append payment_success param so the frontend knows to show a success message
-        const redirectUrl = `${redirectBase}/client/dashboard?payment_success=true`;
         params.append('redirect_url', redirectUrl)
-
-        // Add webhook URL for automatic payment confirmation
         params.append('webhook_url', webhookUrl)
 
         // Use the cleaned handle

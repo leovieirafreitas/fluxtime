@@ -1,5 +1,5 @@
 -- Function to fetch companies where the user is a client, independent of appointments
-CREATE OR REPLACE FUNCTION get_client_companies(
+CREATE OR REPLACE FUNCTION fetch_client_companies_list(
     p_phone text DEFAULT NULL,
     p_email text DEFAULT NULL
 )
@@ -18,7 +18,7 @@ BEGIN
     SELECT DISTINCT
         c.id,
         c.name,
-        c.id::text as slug, -- Fallback to ID for slug if needed, or join with slugs table if it exists
+        c.id::text as slug,
         c.logo_url,
         c.address
     FROM clients cl
@@ -35,4 +35,4 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-GRANT EXECUTE ON FUNCTION get_client_companies TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION fetch_client_companies_list TO anon, authenticated;

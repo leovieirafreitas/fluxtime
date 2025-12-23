@@ -17,6 +17,7 @@ RETURNS TABLE (
     service_price numeric,
     total_amount numeric,  -- Preço com desconto (se aplicado)
     remaining_amount numeric,
+    discount numeric,
     service_duration int,
     company_id uuid,
     company_name text,
@@ -44,6 +45,7 @@ BEGIN
         s.price as service_price,  -- Preço original do serviço
         a.total_amount,  -- Preço final (com desconto se aplicado)
         a.remaining_amount,
+        a.discount,
         s.duration_minutes as service_duration,
         c.id as company_id,
         c.name as company_name,
@@ -61,15 +63,22 @@ BEGIN
     LEFT JOIN profiles p ON a.professional_id = p.id
     WHERE 
         (p_phone IS NOT NULL AND (
+            -- Direct matches
             a.client_phone = p_phone 
             OR a.client_phone = '+55' || p_phone
             OR a.client_phone = '55' || p_phone
-            OR replace(replace(replace(replace(a.client_phone, ' ', ''), '-', ''), '(', ''), ')', '') = replace(replace(replace(replace(p_phone, ' ', ''), '-', ''), '(', ''), ')', '')
+            -- Regex clean match (entire string digits)
+            OR regexp_replace(a.client_phone, '\D','','g') = regexp_replace(p_phone, '\D','','g')
+            -- Suffix match (Last 11 digits - DDD + Number) - ignores country code differences
+            OR RIGHT(regexp_replace(a.client_phone, '\D','','g'), 11) = RIGHT(regexp_replace(p_phone, '\D','','g'), 11)
+            -- Suffix match (Last 9 digits - Number only) - loose match
+             OR RIGHT(regexp_replace(a.client_phone, '\D','','g'), 9) = RIGHT(regexp_replace(p_phone, '\D','','g'), 9)
         ))
         OR 
-        (p_email IS NOT NULL AND a.client_email = p_email)
+        (p_email IS NOT NULL AND LOWER(a.client_email) = LOWER(p_email))
     ORDER BY a.start_time DESC;
 END;
 $$ LANGUAGE plpgsql;
 
 GRANT EXECUTE ON FUNCTION get_client_appointments TO anon, authenticated;
+```

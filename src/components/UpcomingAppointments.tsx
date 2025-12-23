@@ -123,11 +123,60 @@ export default function UpcomingAppointments() {
                                             <h3 className="font-semibold text-dark-100">{appointment.client_name}</h3>
                                             <p className="text-sm text-dark-400">{appointment.service?.name}</p>
                                         </div>
-                                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(appointment.status)}`}>
-                                            {getStatusLabel(appointment.status)}
-                                        </span>
+                                        <div className="flex flex-col items-end gap-1">
+                                            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(appointment.status)}`}>
+                                                {getStatusLabel(appointment.status)}
+                                            </span>
+
+                                            {/* Financial Breakdown - Moved to Top Right */}
+                                            <div className="flex flex-col items-end gap-0.5 mt-1">
+                                                {/* Original Price & Discount (if applicable) */}
+                                                {(appointment.discount && appointment.discount > 0) ? (
+                                                    <>
+                                                        <span className="text-[10px] text-slate-400 line-through">
+                                                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(appointment.service?.price || 0)}
+                                                        </span>
+                                                        <span className="text-[10px] text-red-400">
+                                                            -{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(appointment.discount)}
+                                                        </span>
+                                                    </>
+                                                ) : null}
+
+                                                {/* Main Amount Display */}
+                                                {appointment.payment_status === 'paid' ? (
+                                                    <span className="text-emerald-500 font-bold text-sm">
+                                                        Pago {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                                                            (appointment.total_amount && appointment.total_amount > 0)
+                                                                ? appointment.total_amount
+                                                                : Math.max(0, (appointment.service?.price || 0) - (appointment.discount || 0))
+                                                        )}
+                                                    </span>
+                                                ) : (
+                                                    <div className="flex flex-col items-end">
+                                                        <span className="font-semibold text-dark-200">
+                                                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pendingValue)}
+                                                        </span>
+                                                        <span className="text-[10px] text-slate-400">Pendente</span>
+                                                    </div>
+                                                )}
+
+                                                {/* Partial Payment Badge */}
+                                                {appointment.payment_status !== 'paid' &&
+                                                    (appointment.total_amount || 0) > 0 &&
+                                                    appointment.remaining_amount !== null &&
+                                                    appointment.remaining_amount !== undefined &&
+                                                    appointment.remaining_amount < (appointment.total_amount || 0) && (
+                                                        <div className="text-[10px] text-emerald-600 font-medium bg-emerald-50 px-1.5 py-0.5 rounded-full mt-0.5 border border-emerald-100 flex items-center gap-1">
+                                                            <span>✓</span>
+                                                            Pago R$ {new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(
+                                                                Math.max(0, (appointment.total_amount || 0) - (appointment.remaining_amount || 0))
+                                                            )}
+                                                        </div>
+                                                    )}
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-4 text-sm text-dark-400">
+                                    <div className="flex items-center gap-4 text-sm text-dark-400 mt-2">
                                         <div className="flex items-center gap-1">
                                             <Calendar className="w-4 h-4" />
                                             <span>{formatDate(appointment.start_time)}</span>
@@ -135,31 +184,6 @@ export default function UpcomingAppointments() {
                                         <div className="flex items-center gap-1">
                                             <Clock className="w-4 h-4" />
                                             <span>{formatTime(appointment.start_time)}</span>
-                                        </div>
-                                        <div className="ml-auto flex flex-col items-end">
-                                            {appointment.payment_status === 'paid' ? (
-                                                <span className="text-emerald-500 font-bold">
-                                                    Pago {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-                                                        (appointment.total_amount && appointment.total_amount > 0)
-                                                            ? appointment.total_amount
-                                                            : Math.max(0, (appointment.service?.price || 0) - (appointment.discount || 0))
-                                                    )}
-                                                </span>
-                                            ) : (
-                                                <div className="flex flex-col items-end">
-                                                    <span>
-                                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pendingValue)}
-                                                    </span>
-                                                    <span className="text-[11px] text-slate-500 font-medium">Valor pendente</span>
-                                                </div>
-                                            )}
-                                            {/* Mostra taxa paga se houver pendência restante */}
-                                            {appointment.payment_status !== 'paid' && (appointment.total_amount || 0) > 0 && pendingValue > 0 && (
-                                                <div className="text-[10px] text-emerald-600 font-medium bg-emerald-50 px-1.5 py-0.5 rounded-full mt-0.5 border border-emerald-100 flex items-center gap-1">
-                                                    <span>✓</span>
-                                                    Pago R$ {new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(appointment.total_amount || 0)}
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
                                 </div>
