@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, DollarSign, CreditCard, Send, User, CheckCircle2, MapPin, Sparkles, BadgePercent } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { whatsappService } from '../services/whatsapp';
@@ -192,37 +192,7 @@ export function TransactionDetails({ transaction, companyId, onClose, onUpdate, 
         }
     };
 
-    const getPaymentLink = async (): Promise<string | null> => {
-        try {
-            const { data: tag, error: tagError } = await supabase.rpc('get_company_infinitepay_tag', {
-                p_company_id: companyId
-            });
 
-            if (tagError || !tag) return null;
-
-            const handle = tag.replace('$', '').replace('@', '').trim();
-            const cleanHandle = handle.replace(/[^a-zA-Z0-9_-]/g, '');
-            const amountInCents = Math.round(currentPendingAmount * 100);
-            const itemName = `Pagamento Restante - ${transaction.service_name}`;
-
-            const items = [{
-                quantity: 1,
-                price: amountInCents,
-                name: itemName
-            }];
-
-            const params = new URLSearchParams();
-            params.append('items', JSON.stringify(items));
-            params.append('order_nsu', transaction.appointment_id);
-            if (transaction.client_name) params.append('customer_name', transaction.client_name);
-
-            return `https://checkout.infinitepay.io/${cleanHandle}?${params.toString()}`;
-
-        } catch (error) {
-            console.error('Erro ao gerar link:', error);
-            return null;
-        }
-    };
 
 
 

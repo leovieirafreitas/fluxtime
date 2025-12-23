@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+// import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import { Menu, Download, Search, DollarSign, TrendingUp, TrendingDown, Clock, SearchX, Receipt, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
@@ -31,7 +31,7 @@ export default function Transactions() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const { theme } = useTheme();
     const { addToast } = useToast();
-    const navigate = useNavigate();
+    // const navigate = useNavigate();
     const { profile } = useUserProfile();
 
     const [transactions, setTransactions] = useState<Transaction[]>([]);
