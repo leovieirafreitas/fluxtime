@@ -6,6 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { pushNotificationService } from '../services/pushNotificationService';
 import { useToast } from '../contexts/ToastContext';
+import IOSInstallPrompt from '../components/IOSInstallPrompt';
 
 interface Notification {
     id: string;
@@ -175,6 +176,7 @@ export default function NotificationsPage() {
 
     return (
         <div style={{ backgroundColor: theme === 'dark' ? '#000000' : '#f8fafc' }} className="min-h-screen transition-colors duration-300">
+            <IOSInstallPrompt />
             <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
             <div className="md:ml-64 p-4 md:p-8">
