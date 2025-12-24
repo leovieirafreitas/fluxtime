@@ -84,18 +84,7 @@ self.addEventListener('push', (event) => {
             url: data.url || '/',
             appointmentId: data.appointmentId,
             notificationId: data.notificationId
-        },
-        actions: [
-            {
-                action: 'view',
-                title: 'Ver Agendamento',
-                icon: '/icon-192.png'
-            },
-            {
-                action: 'close',
-                title: 'Fechar'
-            }
-        ]
+        }
     };
 
     event.waitUntil(
