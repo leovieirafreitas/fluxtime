@@ -8,7 +8,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['img/Fluxtime.png', 'img/MarcaSite.png'],
+      strategies: 'injectManifest',
+      srcDir: 'public',
+      filename: 'sw.js',
+      includeAssets: ['img/Fluxtime.png', 'img/MarcaSite.png', 'icon-192.png', 'icon-512.png'],
       manifest: {
         name: 'FluxTime',
         short_name: 'FluxTime',
@@ -35,24 +38,6 @@ export default defineConfig({
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'
-          }
-        ]
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-        // Ignorar rotas que não devem ser cacheadas
-        navigateFallbackDenylist: [/^\/socket\.io/, /^\/api/],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'supabase-cache',
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 // 24 horas
-              }
-            }
           }
         ]
       },
