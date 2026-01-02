@@ -9,7 +9,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       strategies: 'injectManifest',
-      srcDir: 'public',
+      srcDir: 'src',
       filename: 'sw.js',
       includeAssets: ['img/Fluxtime.png', 'img/MarcaSite.png', 'icon-192.png', 'icon-512.png'],
       manifest: {

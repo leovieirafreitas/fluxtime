@@ -1,4 +1,7 @@
 // Service Worker para FluxTime
+// eslint-disable-next-line no-unused-vars
+const manifest = self.__WB_MANIFEST;
+
 const CACHE_NAME = 'fluxtime-v1';
 const urlsToCache = [
     '/',
