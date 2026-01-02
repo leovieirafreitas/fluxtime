@@ -52,7 +52,21 @@ self.addEventListener('fetch', (event) => {
 
 // NOTIFICAÇÕES PUSH
 self.addEventListener('push', (event) => {
-    console.log('[SW] Push recebido:', event);
+    console.log('[SW] ========== PUSH RECEBIDO ==========');
+    console.log('[SW] Event completo:', event);
+    console.log('[SW] Event.data existe?', !!event.data);
+
+    if (event.data) {
+        console.log('[SW] Tipo de data:', typeof event.data);
+        console.log('[SW] Métodos disponíveis:', Object.getOwnPropertyNames(Object.getPrototypeOf(event.data)));
+
+        try {
+            const textData = event.data.text();
+            console.log('[SW] Data como texto:', textData);
+        } catch (e) {
+            console.error('[SW] Erro ao ler texto:', e);
+        }
+    }
 
     let data = { title: 'FluxTime', body: 'Nova notificação', url: '/' };
 
@@ -60,15 +74,19 @@ self.addEventListener('push', (event) => {
         try {
             // Tenta parsear como JSON primeiro
             data = event.data.json();
+            console.log('[SW] ✅ Parseado como JSON:', data);
         } catch (e) {
-            console.log('[SW] Payload não é JSON, usando texto puro');
+            console.log('[SW] ⚠️ Payload não é JSON, usando texto puro. Erro:', e.message);
             // Se falhar, assume que o payload é apenas o corpo da mensagem em texto
             data = {
                 title: 'FluxTime',
                 body: event.data.text(),
                 url: '/'
             };
+            console.log('[SW] Data final (texto):', data);
         }
+    } else {
+        console.log('[SW] ⚠️ Nenhum data no evento push!');
     }
 
     const title = data.title || 'FluxTime';

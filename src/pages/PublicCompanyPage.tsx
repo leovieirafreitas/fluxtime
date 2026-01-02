@@ -681,9 +681,14 @@ export default function PublicCompanyPage() {
 
                 // Send Push Notification
                 if (newAppointmentId) {
+                    console.log('[Push] Enviando notificação para appointment:', newAppointmentId);
                     supabase.functions.invoke('send-push-notification', {
                         body: { appointment_id: newAppointmentId }
-                    }).catch(err => console.error('Push error:', err));
+                    }).then(result => {
+                        console.log('[Push] Resultado:', result);
+                    }).catch(err => {
+                        console.error('[Push] Erro ao enviar:', err);
+                    });
                 }
 
                 setBookingStep(BookingStep.SUCCESS);

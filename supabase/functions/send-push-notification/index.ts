@@ -1,18 +1,22 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import webpush from 'https://esm.sh/web-push@3.6.7';
+import { createClient } from "npm:@supabase/supabase-js@2.44.4";
+
+// @deno-types="https://deno.land/std@0.168.0/http/server.ts"
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY')!;
 const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY')!;
 
-if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+// Helper function to send push notification using fetch
+async function sendPushNotification(subscription: any, payload: string) {
+    const webpush = await import("npm:web-push@3.6.7");
+
     webpush.setVapidDetails(
         'mailto:contato@fluxtime.com',
         VAPID_PUBLIC_KEY,
         VAPID_PRIVATE_KEY
     );
-} else {
-    console.warn("VAPID Keys not set!");
+
+    return await webpush.sendNotification(subscription, payload);
 }
 
 serve(async (req) => {
@@ -42,7 +46,7 @@ serve(async (req) => {
         // 1. Buscar detalhes do agendamento
         const { data: appointment, error: aptError } = await supabase
             .from('appointments')
-            .select('*, service:services(name)')
+            .select('*, services(name)')
             .eq('id', appointment_id)
             .single();
 
@@ -50,7 +54,7 @@ serve(async (req) => {
 
         const company_id = appointment.company_id;
         const client_name = appointment.client_name;
-        const service_name = appointment.service?.name || 'Serviço';
+        const service_name = appointment.services?.name || 'Serviço';
         const start_time = new Date(appointment.start_time).toLocaleString('pt-BR');
 
         // 2. Buscar subscrições ativas da empresa
@@ -76,6 +80,9 @@ serve(async (req) => {
             appointmentId: appointment_id
         });
 
+        console.log('Payload a ser enviado:', payload);
+        console.log('Número de subscrições:', subscriptions.length);
+
         // 3. Enviar notificações
         const results = await Promise.allSettled(
             subscriptions.map(async (sub) => {
@@ -88,7 +95,9 @@ serve(async (req) => {
                         }
                     };
 
-                    await webpush.sendNotification(pushSubscription, payload);
+                    console.log('Enviando para endpoint:', sub.endpoint.substring(0, 50) + '...');
+                    const result = await sendPushNotification(pushSubscription, payload);
+                    console.log('Resultado do envio:', result);
                     return true;
                 } catch (error: any) {
                     console.error('Erro ao enviar push:', error);

@@ -1,7 +1,16 @@
 import { supabase } from '../lib/supabase';
 
-// VAPID Public Key
-const VAPID_PUBLIC_KEY = 'BKaf0mfF_6CH6z30N48VErxSfc-CwSqcd-COM2VEv3cgTivebwA8jk-I50YDrZCtM_zFLsXRhtOYVm9I5rlb41E';
+// Tente ler do env, mas tenha um fallback seguro para a chave correta
+const ENV_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+const FALLBACK_KEY = 'BOt4eWnnJuOQpRTIsImhMKtHKIVXPnW2TR4ykYF3_Mp79T5Osg4DQQXeIpAOlyn9bHiBFuO7E5ZOHMOAemCbp6s';
+
+const VAPID_PUBLIC_KEY = ENV_KEY || FALLBACK_KEY;
+
+console.log('Push Service Init:', {
+    envKeyLoaded: !!ENV_KEY,
+    usingKey: VAPID_PUBLIC_KEY,
+    keyLength: VAPID_PUBLIC_KEY?.length
+});
 
 export const pushNotificationService = {
     // Verificar se notificações são suportadas
@@ -52,7 +61,14 @@ export const pushNotificationService = {
 
     // Obter subscrição push
     getSubscription: async () => {
-        const registration = await navigator.serviceWorker.ready;
+        if (!pushNotificationService.isSupported()) return null;
+
+        const registration = await navigator.serviceWorker.getRegistration();
+
+        if (!registration) {
+            return null;
+        }
+
         return await registration.pushManager.getSubscription();
     },
 
