@@ -1,6 +1,9 @@
 // Service Worker para FluxTime
+import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
+
 // eslint-disable-next-line no-unused-vars
-const manifest = self.__WB_MANIFEST;
+precacheAndRoute(self.__WB_MANIFEST)
+cleanupOutdatedCaches()
 
 const CACHE_NAME = 'fluxtime-v1';
 const urlsToCache = [
