@@ -11,7 +11,7 @@ async function sendPushNotification(subscription: any, payload: string) {
     const webpush = await import("npm:web-push@3.6.7");
 
     webpush.setVapidDetails(
-        'mailto:contato@fluxtime.com',
+        'mailto:leovieiradefreitas@gmail.com',
         VAPID_PUBLIC_KEY,
         VAPID_PRIVATE_KEY
     );
@@ -87,18 +87,47 @@ serve(async (req) => {
         const results = await Promise.allSettled(
             subscriptions.map(async (sub) => {
                 try {
-                    const pushSubscription = {
-                        endpoint: sub.endpoint,
-                        keys: {
-                            p256dh: sub.p256dh,
-                            auth: sub.auth
-                        }
-                    };
+                    let pushSubscription;
+
+                    // Try to use subscription_data first (new format)
+                    if (sub.subscription_data) {
+                        const subscriptionData = typeof sub.subscription_data === 'string'
+                            ? JSON.parse(sub.subscription_data)
+                            : sub.subscription_data;
+
+                        pushSubscription = {
+                            endpoint: sub.endpoint,
+                            keys: subscriptionData.keys
+                        };
+                        console.log('✅ Usando subscription_data (novo formato)');
+                    } else {
+                        // Fallback to legacy format (p256dh/auth)
+                        pushSubscription = {
+                            endpoint: sub.endpoint,
+                            keys: {
+                                p256dh: sub.p256dh,
+                                auth: sub.auth
+                            }
+                        };
+                        console.log('⚠️ Usando p256dh/auth (formato legado)');
+                    }
 
                     console.log('Enviando para endpoint:', sub.endpoint.substring(0, 50) + '...');
-                    const result = await sendPushNotification(pushSubscription, payload);
-                    console.log('Resultado do envio:', result);
-                    return true;
+                    console.log('User agent:', sub.user_agent);
+
+                    try {
+                        const result = await sendPushNotification(pushSubscription, payload);
+                        console.log('✅ Sucesso! Resultado:', JSON.stringify(result));
+                        return true;
+                    } catch (sendError: any) {
+                        console.error('❌ Erro ao enviar push:', {
+                            message: sendError.message,
+                            statusCode: sendError.statusCode,
+                            body: sendError.body,
+                            endpoint: sub.endpoint.substring(0, 50)
+                        });
+                        throw sendError;
+                    }
                 } catch (error: any) {
                     console.error('Erro ao enviar push:', error);
                     if (error.statusCode === 410 || error.statusCode === 404) {

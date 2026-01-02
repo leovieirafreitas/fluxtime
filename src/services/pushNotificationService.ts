@@ -130,6 +130,7 @@ export const pushNotificationService = {
                     user_id: user.id,
                     company_id: profile.company_id,
                     endpoint: subscription.endpoint,
+                    subscription_data: subscriptionJson, // Salvar objeto completo
                     p256dh: subscriptionJson.keys?.p256dh || '',
                     auth: subscriptionJson.keys?.auth || '',
                     user_agent: navigator.userAgent,
